@@ -122,6 +122,7 @@ ament_target_dependencies(
   sensor_msgs
   nav_msgs
   geometry_msgs
+  std_msgs
   tf2_ros
   tf2_eigen
   pcl_conversions
@@ -133,9 +134,36 @@ rclcpp_components_register_node(
   EXECUTABLE spark_lio_mapping
 )
 
+# Relocalization component
+add_library(spark_lio_relocalization_component SHARED
+  src/relocalization.cpp
+)
+target_compile_features(spark_lio_relocalization_component PUBLIC cxx_std_20)
+target_link_libraries(spark_lio_relocalization_component
+  ${PCL_LIBRARIES}
+)
+ament_target_dependencies(
+  spark_lio_relocalization_component
+  rclcpp
+  rclcpp_components
+  sensor_msgs
+  nav_msgs
+  geometry_msgs
+  std_msgs
+  tf2_ros
+  tf2_eigen
+  tf2_geometry_msgs
+  pcl_conversions
+)
+rclcpp_components_register_node(
+  spark_lio_relocalization_component
+  PLUGIN "spark_fast_lio::Relocalization"
+  EXECUTABLE spark_lio_relocalization
+)
+
 # Install
 install(
-  TARGETS spark_lio_component
+  TARGETS spark_lio_component spark_lio_relocalization_component
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}

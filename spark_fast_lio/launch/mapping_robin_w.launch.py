@@ -63,6 +63,8 @@ def launch_setup(context, *args, **kwargs):
         name='lio_mapping',
         output='screen',
         on_exit=Shutdown(),
+        sigterm_timeout='600',
+        sigkill_timeout='600',
         parameters=[config_path, {'use_sim_time': use_sim_time}],
     )
 
@@ -110,7 +112,7 @@ def generate_launch_description():
                               description='Model-specific configuration'),
         DeclareLaunchArgument('rviz_path', default_value=default_rviz,
                               description='rviz file to load'),
-        DeclareLaunchArgument('use_sim_time', default_value='false',
+        DeclareLaunchArgument('use_sim_time', default_value='true',
                               description='Set true when replaying a bag with --clock'),
         OpaqueFunction(function=launch_setup),
     ])

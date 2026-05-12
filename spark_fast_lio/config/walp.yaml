@@ -1,10 +1,10 @@
 /**:
   ros__parameters:
     common:
-      lidar_frame: "os_sensor"
-      imu_frame: "vectornav"
-      map_frame: "odom"
-      base_frame: "base_link"
+      lidar_frame: "walp/os_sensor"
+      imu_frame: "walp/vectornav"
+      map_frame: "walp/odom"
+      base_frame: "walp/base_link"
       # Frame in which odometry, TF child, and registered clouds are expressed.
       # Options:
       #   "imu"   -> publishes map_frame -> imu_frame   (EKF native; no extrinsic applied)
@@ -18,7 +18,7 @@
       # When BOTH flags below are true, mapping.extrinsic_T/R (IMU->LiDAR) is auto-derived from
       # these matrices and the values in mapping.extrinsic_T/R are ignored.
       publish_base_to_lidar_tf: true
-      base_T_lidar: [0.0, 0.0, 0.0]
+      base_T_lidar: [0.0, 0.0, 0.06]
       base_R_lidar: [1.0, 0.0, 0.0,
                      0.0, 1.0, 0.0,
                      0.0, 0.0, 1.0]
@@ -37,8 +37,8 @@
       scan_line: 32
       scan_rate: 10               # only need to be set for velodyne, unit: Hz,
       timestamp_unit: 3           # the unit of time/t field in the PointCloud2 rostopic: 0-second, 1-milisecond, 2-microsecond, 3-nanosecond.
-      blind: 4.0
-      blind_for_human_pilot: 4.0  # This parameter is to reject cloud points from human pilots
+      blind: 3.0
+      blind_for_human_pilot: 3.0  # This parameter is to reject cloud points from human pilots
 
     mapping:
       acc_cov: 0.1
@@ -58,30 +58,30 @@
       #  - [0.0, 0.0, 0.0, 1.0]
       # However, this matrix is tranformation of IMU w.r.t. LiDAR frame.
       # What we need is transformation LiDAR w.r.t. (or to) IMU frame; thus, the inverse matrix should be given
-      extrinsic_T: [0.0, 0.0, 0.0]
+      extrinsic_T: [0.0, 0.0, 0.06]
       extrinsic_R: [1.0, 0.0, 0.0,
                     0.0, 1.0, 0.0,
                     0.0, 0.0, 1.0]
 
-    filter_size_map: 0.75 #0.5
+    filter_size_map: 0.2 #0.5
 
     topics:
       # Subscribers
-      lidar: "/spot/ouster/points"
-      imu: "/vectornav/imu"
+      lidar: "walp/ouster/points"
+      imu: "walp/vectornav/imu"
       # Publishers
-      cloud_registered: "fast_lio/cloud_registered"
-      cloud_registered_lidar: "fast_lio/cloud_registered_lidar"
-      cloud_registered_body: "fast_lio/cloud_registered_body"
-      cloud_registered_base: "fast_lio/cloud_registered_base"
-      cloud_map: "fast_lio/cloud_map"
-      odometry: "fast_lio/odometry"
-      path: "fast_lio/path"
+      cloud_registered: "walp/fast_lio/cloud_registered"
+      cloud_registered_lidar: "walp/fast_lio/cloud_registered_lidar"
+      cloud_registered_body: "walp/fast_lio/cloud_registered_body"
+      cloud_registered_base: "walp/fast_lio/cloud_registered_base"
+      cloud_map: "walp/fast_lio/cloud_map"
+      odometry: "walp/fast_lio/odometry"
+      path: "walp/fast_lio/path"
 
     publish:
       path_en: true
       scan_publish_en: true        # false: close all the point cloud output
-      dense_publish_en: true       # false: low down the points number in a global-frame point clouds scan.
+      dense_publish_en: false       # false: low down the points number in a global-frame point clouds scan.
       scan_lidarframe_pub_en: true # true: output the point cloud scans in the LiDAR frame
       scan_bodyframe_pub_en: false  # true: output the point cloud scans in IMU-body frame
       scan_baseframe_pub_en: false  # true: output the point cloud scans in the base frame
@@ -95,25 +95,25 @@
       interval: 1                     # how many LiDAR frames merged into each individual scan pcd
 
     relocalization:
-      map_file: "/home/niksta/Documents/datasets/campus_robinw/campus_robinw_map.pcd"                              # absolute path to prior map .pcd
-      map_frame: "map"                          # global map frame (matches campus_ouster.rviz Fixed Frame)
-      odom_frame: "odom"                        # must match common.map_frame
-      base_frame: "base_link"                   # must match common.base_frame
-      prior_map_voxel_size: 1.0
-      scan_voxel_size: 0.5
+      map_file: ""                              # absolute path to prior map .pcd
+      map_frame: "map"                          # global map frame
+      odom_frame: "walp/odom"                   # must match common.map_frame
+      base_frame: "walp/base_link"              # must match common.base_frame
+      prior_map_voxel_size: 0.4
+      scan_voxel_size: 0.4
       initialpose_topic: "/initialpose"
-      prior_map_topic: "fast_lio/prior_map"
-      localized_odom_topic: "fast_lio/relocalized_odometry"
-      status_topic: "fast_lio/relocalization_status"
+      prior_map_topic: "walp/fast_lio/prior_map"
+      localized_odom_topic: "walp/fast_lio/localized_odometry"
+      status_topic: "walp/fast_lio/relocalization_status"
       publish_localized_odom: true
-      correction_rate_hz: 0.5
-      tf_publish_rate_hz: 20.0
+      correction_rate_hz: 1.0
+      tf_publish_rate_hz: 50.0
       gicp:
         max_correspondence_distance_init: 5.0
         max_correspondence_distance_track: 1.0
         max_iterations: 50
         transformation_epsilon: 1.0e-4
-        fitness_threshold: 1.0  # accepted if lower than this value
+        fitness_threshold: 1.0
 
     verbose: true
     pcl_verbose: false

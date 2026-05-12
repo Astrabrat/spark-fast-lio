@@ -40,8 +40,8 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('spark_fast_lio')
-    default_config = os.path.join(pkg_share, 'config', 'campus_ouster.yaml')
-    default_rviz = os.path.join(pkg_share, 'rviz', 'campus_ouster.rviz')
+    default_config = os.path.join(pkg_share, 'config', 'walp.yaml')
+    default_rviz = os.path.join(pkg_share, 'rviz', 'walp_ouster.rviz')
 
     return LaunchDescription([
         DeclareLaunchArgument('start_rviz', default_value='false',

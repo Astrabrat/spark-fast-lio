@@ -4,20 +4,24 @@
       lidar_frame: "seyond"
       imu_frame: "vectornav"
       map_frame: "odom"
-      base_frame: "vectornav"
+      base_frame: "base_link"
       # Frame in which odometry, TF child, and registered clouds are expressed.
-      # Options: "imu" | "lidar" | "base"
-      visualization_frame: "imu"
+      # Options:
+      #   "imu"   -> publishes map_frame -> imu_frame   (EKF native; no extrinsic applied)
+      #   "lidar" -> publishes map_frame -> lidar_frame (IMU pose composed with IMU->LiDAR extrinsic)
+      #   "base"  -> publishes map_frame -> base_frame  (IMU pose composed with IMU->base extrinsic;
+      #                                                  requires base_frame set and base->lidar TF available)
+      visualization_frame: "base"
 
       # When true, spark-fast-lio broadcasts these as static TFs itself and skips
       # looking up base->lidar from the TF tree. If BOTH flags are true, the
       # IMU->LiDAR extrinsic (mapping.extrinsic_T/R) is auto-derived.
-      publish_base_to_lidar_tf: false
+      publish_base_to_lidar_tf: true
       base_T_lidar: [0.0, 0.0, 0.0]
       base_R_lidar: [1.0, 0.0, 0.0,
                      0.0, 1.0, 0.0,
                      0.0, 0.0, 1.0]
-      publish_base_to_imu_tf: false
+      publish_base_to_imu_tf: true
       base_T_imu: [0.0, 0.0, 0.0]
       base_R_imu: [1.0, 0.0, 0.0,
                    0.0, 1.0, 0.0,
@@ -25,7 +29,7 @@
 
 
     gravity_alignment:
-      enable_gravity_alignment: false
+      enable_gravity_alignment: true
 
     preprocess:
       lidar_type: 3               # 1 for Livox serials LiDAR, 2 for Velodyne LiDAR, 3 for ouster LiDAR,
@@ -76,17 +80,39 @@
     publish:
       path_en: true
       scan_publish_en: true        # false: close all the point cloud output
-      dense_publish_en: false       # false: low down the points number in a global-frame point clouds scan.
+      dense_publish_en: true       # false: low down the points number in a global-frame point clouds scan.
       scan_lidarframe_pub_en: true # true: output the point cloud scans in the LiDAR frame
       scan_bodyframe_pub_en: false  # true: output the point cloud scans in IMU-body frame
       scan_baseframe_pub_en: false  # true: output the point cloud scans in the base frame
       map_pub_interval: 10          # publish map every N scans (0 to disable)
 
     pcd_save:
-      pcd_save_en: false
-      save_path: ""                # directory to save scans and poses (empty = <package>/PCD)
-      interval: 1                 # how many LiDAR frames saved in each pcd file;
-      # -1 : all frames will be saved in ONE pcd file, may lead to memory crash when having too much frames.
+      pcd_save_en: false              # if true: accumulate all scans and write a single downsampled full_map.pcd at shutdown
+      save_path: ""                   # directory to save scans and poses (empty = <package>/PCD)
+      full_map_voxel_size: 0.2        # voxel size for the full accumulated map written on shutdown
+      save_individual_scans: false    # if true: save per-interval scan pcds + poses_odom.txt (+ poses_map.txt when relocalized)
+      interval: 1                     # how many LiDAR frames merged into each individual scan pcd
+
+    relocalization:
+      map_file: ""                              # absolute path to prior map .pcd
+      map_frame: "map"                          # global map frame (matches campus_ouster.rviz Fixed Frame)
+      odom_frame: "odom"                        # must match common.map_frame
+      base_frame: "base_link"                   # must match common.base_frame
+      prior_map_voxel_size: 0.4
+      scan_voxel_size: 0.4
+      initialpose_topic: "/initialpose"
+      prior_map_topic: "fast_lio/prior_map"
+      localized_odom_topic: "fast_lio/localized_odometry"
+      status_topic: "fast_lio/relocalization_status"
+      publish_localized_odom: true
+      correction_rate_hz: 1.0
+      tf_publish_rate_hz: 50.0
+      gicp:
+        max_correspondence_distance_init: 5.0
+        max_correspondence_distance_track: 1.0
+        max_iterations: 50
+        transformation_epsilon: 1.0e-4
+        fitness_threshold: 1.0
 
     verbose: true
     pcl_verbose: false
