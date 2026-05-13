@@ -21,7 +21,7 @@
       b_acc_cov: 0.0001
       b_gyr_cov: 0.0001
       fov_degree: 360.0
-      det_range: 80.0
+      det_range: 100.0
       extrinsic_est_en: false      # true: enable the online estimation of IMU-LiDAR extrinsic,
 
       # NOTE(hlim): In `vbr_calib.yaml`, it says:
@@ -33,7 +33,7 @@
       #  - [0.0, 0.0, 0.0, 1.0]
       # However, this matrix is tranformation of IMU w.r.t. LiDAR frame.
       # What we need is transformation LiDAR w.r.t. (or to) IMU frame; thus, the inverse matrix should be given
-      extrinsic_T: [0.0, 0.0, 0.06]
+      extrinsic_T: [0.0, 0.0, 0.10]
       extrinsic_R: [1.0, 0.0, 0.0,
                     0.0, 1.0, 0.0,
                     0.0, 0.0, 1.0]
@@ -63,7 +63,7 @@
       map_pub_interval: 20          # publish map every N scans (0 to disable)
 
     pcd_save:
-      pcd_save_en: true
+      pcd_save_en: false
       save_path: "/media/niksta/d70d3c70-5552-47eb-9d41-a97e911bd3c2/datasets/campus/Database/Ouster"                # directory to save scans and poses (empty = <package>/PCD)
       interval: 1                 # how many LiDAR frames saved in each pcd file;
       # -1 : all frames will be saved in ONE pcd file, may lead to memory crash when having too much frames.

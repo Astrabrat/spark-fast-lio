@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <deque>
 #include <fstream>
 #include <mutex>
@@ -7,6 +8,7 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
 #include <pcl/filters/voxel_grid.h>
@@ -15,7 +17,9 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <tf2_ros/buffer.h>
+#include <tf2_ros/static_transform_broadcaster.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 
@@ -44,6 +48,7 @@ struct PoseStruct {
 class SPARKFastLIO2 : public rclcpp::Node {
  public:
   explicit SPARKFastLIO2(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
+  ~SPARKFastLIO2() override;
 
  private:
   M3D computeRelativeRotation(const Eigen::Vector3d &g_a, const Eigen::Vector3d &g_b);
@@ -157,6 +162,9 @@ class SPARKFastLIO2 : public rclcpp::Node {
 #endif
 
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_imu_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_relocalization_status_;
+  std::atomic<bool> wait_for_relocalization_{false};
+  std::atomic<bool> relocalization_ready_{false};
 
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_cloud_full_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_cloud_lidar_;
@@ -167,6 +175,7 @@ class SPARKFastLIO2 : public rclcpp::Node {
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_path_;
 
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+  std::shared_ptr<tf2_ros::StaticTransformBroadcaster> static_tf_broadcaster_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
@@ -202,9 +211,16 @@ class SPARKFastLIO2 : public rclcpp::Node {
   int add_point_size_        = 0;
   int kdtree_delete_counter_ = 0;
 
-  bool pcd_save_en_       = false;
+  bool pcd_save_en_              = false;  // save full accumulated map at shutdown
+  bool save_individual_scans_en_ = false;  // save per-interval scan pcds + poses
+  double full_map_voxel_size_    = 0.2;
   std::string pcd_save_path_;
-  std::ofstream poses_file_;
+  std::ofstream poses_file_odom_;
+  std::ofstream poses_file_map_;
+  PointCloudXYZI::Ptr full_map_accum_;
+  std::string reloc_map_frame_;
+  Eigen::Isometry3d latest_map_T_odom_{Eigen::Isometry3d::Identity()};
+  bool has_map_T_odom_ = false;
   bool time_sync_en_      = false;
   bool extrinsic_est_en_  = false;
   bool path_en_           = true;
@@ -295,6 +311,14 @@ class SPARKFastLIO2 : public rclcpp::Node {
   std::vector<double> extrinT_{0.0, 0.0, 0.0};
   std::vector<double> extrinR_{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
   double extrinsics_timeout_s_ = 10.0;
+
+  // base_link -> sensor static TFs: optionally published by this node
+  bool publish_base_to_lidar_tf_ = false;
+  bool publish_base_to_imu_tf_   = false;
+  std::vector<double> base_T_lidar_{0.0, 0.0, 0.0};
+  std::vector<double> base_R_lidar_{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+  std::vector<double> base_T_imu_{0.0, 0.0, 0.0};
+  std::vector<double> base_R_imu_{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
 
   std::deque<double> time_buffer_;
   std::deque<PointCloudXYZI::Ptr> lidar_buffer_;

@@ -7,6 +7,8 @@
 
 #include <omp.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <tf2/exceptions.h>
+#include <tf2/time.h>
 #include <rclcpp_components/register_node_macro.hpp>
 
 namespace spark_fast_lio {
@@ -73,11 +75,26 @@ SPARKFastLIO2::SPARKFastLIO2(const rclcpp::NodeOptions &options)
   }
 
   runtime_pos_log_      = declare_parameter<bool>("runtime_pos_log_enable", false);
+  {
+    const auto reloc_status_topic =
+        declare_parameter<std::string>("relocalization.status_topic", "");
+    if (!reloc_status_topic.empty()) {
+      wait_for_relocalization_.store(true);
+      sub_relocalization_status_ = create_subscription<std_msgs::msg::Bool>(
+          reloc_status_topic, rclcpp::QoS(1).transient_local().reliable(),
+          [this](const std_msgs::msg::Bool::ConstSharedPtr msg) {
+            relocalization_ready_.store(msg->data);
+          });
+    }
+  }
   extrinsic_est_en_     = declare_parameter<bool>("mapping.extrinsic_est_en", false);
   extrinsics_timeout_s_ = declare_parameter<double>("extrinsics_timeout_s", 10.0);
-  pcd_save_en_          = declare_parameter<bool>("pcd_save.pcd_save_en", false);
-  pcd_save_path_        = declare_parameter<std::string>("pcd_save.save_path", "");
-  pcd_save_interval_    = declare_parameter<int>("pcd_save.interval", -1);
+  pcd_save_en_              = declare_parameter<bool>("pcd_save.pcd_save_en", false);
+  pcd_save_path_            = declare_parameter<std::string>("pcd_save.save_path", "");
+  pcd_save_interval_        = declare_parameter<int>("pcd_save.interval", -1);
+  full_map_voxel_size_      = declare_parameter<double>("pcd_save.full_map_voxel_size", 0.2);
+  save_individual_scans_en_ = declare_parameter<bool>("pcd_save.save_individual_scans", false);
+  reloc_map_frame_          = declare_parameter<std::string>("relocalization.map_frame", "");
   map_pub_interval_     = declare_parameter<int>("publish.map_pub_interval", 10);
 
   point_filter_num_ = declare_parameter<int>("point_filter_num", 4);
@@ -85,6 +102,46 @@ SPARKFastLIO2::SPARKFastLIO2(const rclcpp::NodeOptions &options)
   // extrinT_ and extrinR_ are sized 3 and 9 respectively
   extrinT_ = declare_parameter<std::vector<double>>("mapping.extrinsic_T", extrinT_);
   extrinR_ = declare_parameter<std::vector<double>>("mapping.extrinsic_R", extrinR_);
+
+  // Optional: this node publishes static base_frame -> {lidar,imu}_frame TFs directly,
+  // instead of relying on an external publisher (URDF, ouster driver, etc.).
+  publish_base_to_lidar_tf_ =
+      declare_parameter<bool>("common.publish_base_to_lidar_tf", false);
+  publish_base_to_imu_tf_ = declare_parameter<bool>("common.publish_base_to_imu_tf", false);
+  base_T_lidar_ = declare_parameter<std::vector<double>>("common.base_T_lidar", base_T_lidar_);
+  base_R_lidar_ = declare_parameter<std::vector<double>>("common.base_R_lidar", base_R_lidar_);
+  base_T_imu_   = declare_parameter<std::vector<double>>("common.base_T_imu", base_T_imu_);
+  base_R_imu_   = declare_parameter<std::vector<double>>("common.base_R_imu", base_R_imu_);
+
+  // If both base->lidar and base->imu matrices are known, auto-derive the
+  // IMU->LiDAR extrinsic used by the EKF (overriding mapping.extrinsic_T/R).
+  // T_imu_lidar = T_imu_base * T_base_lidar, with T_imu_base = T_base_imu^{-1}.
+  if (publish_base_to_lidar_tf_ && publish_base_to_imu_tf_ && base_T_lidar_.size() == 3 &&
+      base_R_lidar_.size() == 9 && base_T_imu_.size() == 3 && base_R_imu_.size() == 9) {
+    Eigen::Vector3d t_bl(base_T_lidar_[0], base_T_lidar_[1], base_T_lidar_[2]);
+    Eigen::Matrix3d R_bl;
+    R_bl << base_R_lidar_[0], base_R_lidar_[1], base_R_lidar_[2], base_R_lidar_[3],
+        base_R_lidar_[4], base_R_lidar_[5], base_R_lidar_[6], base_R_lidar_[7], base_R_lidar_[8];
+    Eigen::Vector3d t_bi(base_T_imu_[0], base_T_imu_[1], base_T_imu_[2]);
+    Eigen::Matrix3d R_bi;
+    R_bi << base_R_imu_[0], base_R_imu_[1], base_R_imu_[2], base_R_imu_[3], base_R_imu_[4],
+        base_R_imu_[5], base_R_imu_[6], base_R_imu_[7], base_R_imu_[8];
+
+    const Eigen::Matrix3d R_bi_T = R_bi.transpose();
+    const Eigen::Matrix3d R_il   = R_bi_T * R_bl;
+    const Eigen::Vector3d t_il   = R_bi_T * (t_bl - t_bi);
+
+    extrinT_ = {t_il(0), t_il(1), t_il(2)};
+    extrinR_ = {R_il(0, 0), R_il(0, 1), R_il(0, 2), R_il(1, 0), R_il(1, 1),
+                R_il(1, 2), R_il(2, 0), R_il(2, 1), R_il(2, 2)};
+
+    RCLCPP_INFO(this->get_logger(),
+                "Auto-derived IMU->LiDAR extrinsic from base_T_lidar and base_T_imu: "
+                "T=[%.3f, %.3f, %.3f]",
+                t_il(0),
+                t_il(1),
+                t_il(2));
+  }
 
   auto g_vec = declare_parameter<std::vector<double>>("gravity_alignment.g_base", {0.0, 0.0, -1.0});
   g_base_ << g_vec[0], g_vec[1], g_vec[2];
@@ -129,9 +186,10 @@ SPARKFastLIO2::SPARKFastLIO2(const rclcpp::NodeOptions &options)
   pub_path_      = create_publisher<nav_msgs::msg::Path>(topic_path, qos);
   path_msg_.header.frame_id = map_frame_;
 
-  tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
-  tf_buffer_      = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-  tf_listener_    = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+  tf_broadcaster_        = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+  static_tf_broadcaster_ = std::make_shared<tf2_ros::StaticTransformBroadcaster>(this);
+  tf_buffer_             = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  tf_listener_           = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
   preprocessor_        = std::make_shared<Preprocess>();
   preprocessor_->blind = declare_parameter<double>("preprocess.blind", 0.01);
@@ -183,21 +241,73 @@ SPARKFastLIO2::SPARKFastLIO2(const rclcpp::NodeOptions &options)
   corr_normvec_.reset(new PointCloudXYZI(100000, 1));
   cloud_to_be_saved_.reset(new PointCloudXYZI());
 
-  if (pcd_save_en_) {
+  if (pcd_save_en_ || save_individual_scans_en_) {
     if (pcd_save_path_.empty()) {
       pcd_save_path_ = std::string(ROOT_DIR) + "PCD";
     }
     std::filesystem::create_directories(pcd_save_path_);
-    poses_file_.open(pcd_save_path_ + "/poses.txt");
-    poses_file_ << "# timestamp_ns tx ty tz qx qy qz qw" << std::endl;
-    poses_file_ << std::fixed << std::setprecision(6);
-    RCLCPP_INFO(this->get_logger(), "Saving scans and poses to: %s", pcd_save_path_.c_str());
+    if (pcd_save_en_) {
+      full_map_accum_.reset(new PointCloudXYZI());
+    }
+    if (save_individual_scans_en_) {
+      poses_file_odom_.open(pcd_save_path_ + "/poses_odom.txt");
+      poses_file_odom_ << "# timestamp_ns tx ty tz qx qy qz qw" << std::endl;
+      poses_file_odom_ << std::fixed << std::setprecision(6);
+      if (wait_for_relocalization_.load()) {
+        poses_file_map_.open(pcd_save_path_ + "/poses_map.txt");
+        poses_file_map_ << "# timestamp_ns tx ty tz qx qy qz qw" << std::endl;
+        poses_file_map_ << std::fixed << std::setprecision(6);
+      }
+    }
+    RCLCPP_INFO(this->get_logger(),
+                "PCD output dir: %s (full_map=%d, scans=%d)",
+                pcd_save_path_.c_str(),
+                static_cast<int>(pcd_save_en_),
+                static_cast<int>(save_individual_scans_en_));
   }
 
   if (!base_frame_.empty()) {
-    if (!lookupBaseExtrinsics(lidar_T_wrt_base_, lidar_R_wrt_base_)) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to lookup transform.");
-      return;
+    auto broadcast_static = [this](const std::string &parent,
+                                   const std::string &child,
+                                   const std::vector<double> &t,
+                                   const std::vector<double> &r) {
+      geometry_msgs::msg::TransformStamped msg;
+      msg.header.stamp            = this->now();
+      msg.header.frame_id         = parent;
+      msg.child_frame_id          = child;
+      msg.transform.translation.x = t[0];
+      msg.transform.translation.y = t[1];
+      msg.transform.translation.z = t[2];
+      Eigen::Matrix3d R;
+      R << r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8];
+      Eigen::Quaterniond q(R);
+      q.normalize();
+      msg.transform.rotation.x = q.x();
+      msg.transform.rotation.y = q.y();
+      msg.transform.rotation.z = q.z();
+      msg.transform.rotation.w = q.w();
+      static_tf_broadcaster_->sendTransform(msg);
+      RCLCPP_INFO(this->get_logger(),
+                  "Published static TF %s -> %s",
+                  parent.c_str(),
+                  child.c_str());
+    };
+
+    if (publish_base_to_lidar_tf_ && base_T_lidar_.size() == 3 && base_R_lidar_.size() == 9) {
+      broadcast_static(base_frame_, lidar_frame_, base_T_lidar_, base_R_lidar_);
+      lidar_T_wrt_base_ << base_T_lidar_[0], base_T_lidar_[1], base_T_lidar_[2];
+      lidar_R_wrt_base_ << base_R_lidar_[0], base_R_lidar_[1], base_R_lidar_[2],
+          base_R_lidar_[3], base_R_lidar_[4], base_R_lidar_[5], base_R_lidar_[6],
+          base_R_lidar_[7], base_R_lidar_[8];
+    } else {
+      if (!lookupBaseExtrinsics(lidar_T_wrt_base_, lidar_R_wrt_base_)) {
+        RCLCPP_ERROR(this->get_logger(), "Failed to lookup transform.");
+        return;
+      }
+    }
+
+    if (publish_base_to_imu_tf_ && base_T_imu_.size() == 3 && base_R_imu_.size() == 9) {
+      broadcast_static(base_frame_, imu_frame_, base_T_imu_, base_R_imu_);
     }
   }
 
@@ -840,38 +950,135 @@ void SPARKFastLIO2::publishFrameWorld(
   pubCloud->publish(cloud_msg);
   publish_count_ -= PUBFRAME_PERIOD;
 
-  // Optionally do the pcd_save_en_ part
-  if (pcd_save_en_) {
+  // PCD saving: gated on relocalization readiness if we are waiting for it.
+  const bool save_gate_ok =
+      !wait_for_relocalization_.load() || relocalization_ready_.load();
+  if ((pcd_save_en_ || save_individual_scans_en_) && save_gate_ok) {
     int nsize = cloud_undistort_->points.size();
     PointCloudXYZI::Ptr laserCloudWorld2(new PointCloudXYZI(nsize, 1));
-
     for (int i = 0; i < nsize; i++) {
       pclPointBodyToWorld(&cloud_undistort_->points[i], &laserCloudWorld2->points[i]);
     }
-    if (pcd_save_interval_ > 0) {
-      *cloud_to_be_saved_ += *laserCloudWorld2;
+
+    // Refresh latest map<-odom TF if relocalization is active.
+    if (wait_for_relocalization_.load() && !reloc_map_frame_.empty() &&
+        tf_buffer_) {
+      try {
+        auto t = tf_buffer_->lookupTransform(
+            reloc_map_frame_, map_frame_, tf2::TimePointZero);
+        Eigen::Quaterniond q(t.transform.rotation.w,
+                             t.transform.rotation.x,
+                             t.transform.rotation.y,
+                             t.transform.rotation.z);
+        Eigen::Isometry3d T = Eigen::Isometry3d::Identity();
+        T.linear()         = q.toRotationMatrix();
+        T.translation()    = Eigen::Vector3d(t.transform.translation.x,
+                                          t.transform.translation.y,
+                                          t.transform.translation.z);
+        latest_map_T_odom_ = T;
+        has_map_T_odom_    = true;
+      } catch (const tf2::TransformException &) {
+        // keep previous
+      }
     }
 
-    static int scan_wait_num = 0;
-    scan_wait_num++;
-    if (cloud_to_be_saved_->size() > 0 && pcd_save_interval_ > 0 &&
-        scan_wait_num >= pcd_save_interval_) {
-      pcd_index_++;
-      long long stamp_ns = static_cast<long long>(lidar_end_time_ * 1e9);
-      std::string pcd_file = pcd_save_path_ + "/" + std::to_string(stamp_ns) + ".pcd";
-      pcl::PCDWriter pcd_writer;
-      pcd_writer.writeBinary(pcd_file, *cloud_to_be_saved_);
-      cloud_to_be_saved_->clear();
-      scan_wait_num = 0;
+    if (pcd_save_en_ && full_map_accum_) {
+      *full_map_accum_ += *laserCloudWorld2;
+    }
 
-      // Save corresponding pose
-      const auto &p = latest_state_.pos;
-      auto q = latest_state_.rot.coeffs();  // x, y, z, w
-      poses_file_ << stamp_ns << " "
-                  << p(0) << " " << p(1) << " " << p(2) << " "
-                  << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << std::endl;
+    if (save_individual_scans_en_ && pcd_save_interval_ > 0) {
+      static int scan_wait_num = 0;
+      static long long window_stamp_ns = 0;
+      static Eigen::Vector3d window_pos = Eigen::Vector3d::Zero();
+      static Eigen::Quaterniond window_quat = Eigen::Quaterniond::Identity();
+      static Eigen::Isometry3d window_map_T_odom = Eigen::Isometry3d::Identity();
+      static bool window_has_map_T_odom = false;
+
+      if (scan_wait_num == 0) {
+        // First scan of this accumulation window: latch stamp + pose.
+        window_stamp_ns = static_cast<long long>(lidar_end_time_ * 1e9);
+        window_pos      = latest_state_.pos;
+        const auto qc   = latest_state_.rot.coeffs();  // x, y, z, w
+        window_quat     = Eigen::Quaterniond(qc[3], qc[0], qc[1], qc[2]);
+        window_map_T_odom    = latest_map_T_odom_;
+        window_has_map_T_odom = has_map_T_odom_;
+      }
+
+      *cloud_to_be_saved_ += *laserCloudWorld2;
+      scan_wait_num++;
+      if (cloud_to_be_saved_->size() > 0 && scan_wait_num >= pcd_save_interval_) {
+        pcd_index_++;
+        std::string pcd_file =
+            pcd_save_path_ + "/" + std::to_string(window_stamp_ns) + ".pcd";
+        pcl::PCDWriter pcd_writer;
+        pcd_writer.writeBinary(pcd_file, *cloud_to_be_saved_);
+        cloud_to_be_saved_->clear();
+        scan_wait_num = 0;
+
+        poses_file_odom_ << window_stamp_ns << " " << window_pos.x() << " "
+                         << window_pos.y() << " " << window_pos.z() << " "
+                         << window_quat.x() << " " << window_quat.y() << " "
+                         << window_quat.z() << " " << window_quat.w() << std::endl;
+
+        if (poses_file_map_.is_open() && window_has_map_T_odom) {
+          Eigen::Isometry3d odom_T_body = Eigen::Isometry3d::Identity();
+          odom_T_body.translation()     = window_pos;
+          odom_T_body.linear()          = window_quat.toRotationMatrix();
+          Eigen::Isometry3d map_T_body  = window_map_T_odom * odom_T_body;
+          Eigen::Vector3d pm            = map_T_body.translation();
+          Eigen::Quaterniond qm(map_T_body.linear());
+          poses_file_map_ << window_stamp_ns << " " << pm.x() << " " << pm.y()
+                          << " " << pm.z() << " " << qm.x() << " " << qm.y()
+                          << " " << qm.z() << " " << qm.w() << std::endl;
+        }
+      }
     }
   }
+}
+
+SPARKFastLIO2::~SPARKFastLIO2() {
+  if (pcd_save_en_ && full_map_accum_ && !full_map_accum_->empty()) {
+    PointCloudXYZI::Ptr to_save(new PointCloudXYZI());
+    if (full_map_voxel_size_ > 0.0) {
+      pcl::VoxelGrid<PointType> vg;
+      vg.setLeafSize(static_cast<float>(full_map_voxel_size_),
+                     static_cast<float>(full_map_voxel_size_),
+                     static_cast<float>(full_map_voxel_size_));
+      vg.setInputCloud(full_map_accum_);
+      vg.filter(*to_save);
+    } else {
+      *to_save = *full_map_accum_;
+    }
+
+    // If relocalized, transform the full map into the relocalized (map) frame.
+    if (wait_for_relocalization_.load() && has_map_T_odom_) {
+      PointCloudXYZI::Ptr transformed(new PointCloudXYZI());
+      transformed->reserve(to_save->size());
+      const Eigen::Matrix3d R = latest_map_T_odom_.linear();
+      const Eigen::Vector3d t = latest_map_T_odom_.translation();
+      for (const auto &pt : to_save->points) {
+        Eigen::Vector3d p_odom(pt.x, pt.y, pt.z);
+        Eigen::Vector3d p_map = R * p_odom + t;
+        PointType pn          = pt;
+        pn.x                  = static_cast<float>(p_map.x());
+        pn.y                  = static_cast<float>(p_map.y());
+        pn.z                  = static_cast<float>(p_map.z());
+        transformed->push_back(pn);
+      }
+      to_save = transformed;
+    }
+
+    const std::string out = pcd_save_path_ + "/full_map.pcd";
+    pcl::PCDWriter pcd_writer;
+    pcd_writer.writeBinary(out, *to_save);
+    RCLCPP_INFO(this->get_logger(),
+                "Saved full map (%zu points, voxel %.3f) to %s",
+                to_save->size(),
+                full_map_voxel_size_,
+                out.c_str());
+  }
+  if (poses_file_odom_.is_open()) poses_file_odom_.close();
+  if (poses_file_map_.is_open()) poses_file_map_.close();
 }
 
 void SPARKFastLIO2::publishFrame(
@@ -1198,9 +1405,11 @@ void SPARKFastLIO2::processLidarAndImu(MeasureGroup &Measures) {
     prev_pos_     = p;
     has_prev_pos_ = true;
 
-    printf("xyz: %+7.2f %+7.2f %+7.2f | yaw: %+6.1f | dist: %.3f km | map: %.2fM pts | dt: %.1f ms\n",
-           p(0), p(1), p(2), euler[2], total_distance_m_ / 1000.0, kdtree_size_st_ / 1e6, t_update * 1000.0);
-    fflush(stdout);
+    if (!wait_for_relocalization_.load() || relocalization_ready_.load()) {
+      printf("xyz: %+7.2f %+7.2f %+7.2f | yaw: %+6.1f | dist: %.3f km | map: %.2fM pts | dt: %.1f ms\n",
+             p(0), p(1), p(2), euler[2], total_distance_m_ / 1000.0, kdtree_size_st_ / 1e6, t_update * 1000.0);
+      fflush(stdout);
+    }
   }
 }
 }  // namespace spark_fast_lio

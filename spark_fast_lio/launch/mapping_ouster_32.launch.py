@@ -45,6 +45,7 @@ def rotation_matrix_to_quaternion(r):
 def launch_setup(context, *args, **kwargs):
     config_path = LaunchConfiguration('config_path').perform(context)
     rviz_path = LaunchConfiguration('rviz_path').perform(context)
+    use_sim_time = LaunchConfiguration('use_sim_time')
 
     with open(config_path, 'r') as f:
         cfg = yaml.safe_load(f)
@@ -62,7 +63,7 @@ def launch_setup(context, *args, **kwargs):
         name='lio_mapping',
         output='screen',
         on_exit=Shutdown(),
-        parameters=[config_path],
+        parameters=[config_path, {'use_sim_time': use_sim_time}],
     )
 
     static_tf_node = Node(
@@ -70,6 +71,7 @@ def launch_setup(context, *args, **kwargs):
         executable='static_transform_publisher',
         name='imu_to_lidar_static_tf',
         output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
         arguments=[
             '--x', str(extrinsic_t[0]),
             '--y', str(extrinsic_t[1]),
@@ -89,6 +91,7 @@ def launch_setup(context, *args, **kwargs):
         name='rviz',
         prefix='nice',
         output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
         arguments=['-d', rviz_path],
         condition=IfCondition(LaunchConfiguration('start_rviz')),
     )
@@ -104,6 +107,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('start_rviz', default_value='false',
                               description='automatically start rviz'),
+        DeclareLaunchArgument('use_sim_time', default_value='false',
+                              description='Set true when replaying a bag with --clock'),
         DeclareLaunchArgument('config_path', default_value=default_config,
                               description='Model-specific configuration'),
         DeclareLaunchArgument('rviz_path', default_value=default_rviz,
