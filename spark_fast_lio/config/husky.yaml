@@ -99,7 +99,7 @@
     pcd_save:
       pcd_save_en: true
       save_path: ""                # directory to save scans and poses (empty = <package>/PCD)
-      full_map_voxel_size: 0.1        # voxel size for the full accumulated map written on shutdown
+      full_map_voxel_size: 0.2        # voxel size for the full accumulated map written on shutdown
       save_individual_scans: false    # if true: save per-interval scan pcds + poses_odom.txt (+ poses_map.txt when relocalized)
       interval: 1                     # how many LiDAR frames merged into each individual scan pcd
 

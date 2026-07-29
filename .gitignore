@@ -9,8 +9,10 @@ cmake-build-debug*
 spark_fast_lio/Log/*
 spark_fast_lio/PCD/*
 spark_fast_lio/PCD/*.pcd
+spark_fast_lio/PCD*/
 spark_fast_lio/Log/mat_pre.txt
 
+*.pcd
 ### C++ ###
 # Prerequisites
 *.d
