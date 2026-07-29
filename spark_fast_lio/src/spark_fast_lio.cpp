@@ -113,6 +113,14 @@ SPARKFastLIO2::SPARKFastLIO2(const rclcpp::NodeOptions &options)
   full_map_voxel_size_      = declare_parameter<double>("pcd_save.full_map_voxel_size", 0.2);
   save_individual_scans_en_ = declare_parameter<bool>("pcd_save.save_individual_scans", false);
   reloc_map_frame_          = declare_parameter<std::string>("relocalization.map_frame", "");
+  {  // Namespace like the other frames so the map<-odom TF lookup matches the reloc node.
+    std::string ns = get_namespace();
+    ns             = (ns == "/") ? "" : ns.substr(1) + "/";
+    if (!reloc_map_frame_.empty()) {
+      if (reloc_map_frame_.front() == '/') reloc_map_frame_ = reloc_map_frame_.substr(1);
+      else if (!ns.empty()) reloc_map_frame_ = ns + reloc_map_frame_;
+    }
+  }
   map_pub_interval_     = declare_parameter<int>("publish.map_pub_interval", 10);
 
   point_filter_num_ = declare_parameter<int>("point_filter_num", 4);
