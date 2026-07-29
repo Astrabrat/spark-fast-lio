@@ -62,6 +62,23 @@ Relocalization::Relocalization(const rclcpp::NodeOptions& options)
   map_frame_  = declare_parameter<std::string>("relocalization.map_frame", "map");
   odom_frame_ = declare_parameter<std::string>("relocalization.odom_frame", "odom");
   base_frame_ = declare_parameter<std::string>("relocalization.base_frame", "base_link");
+
+  // Namespace the TF frames like spark_fast_lio.cpp: a relative frame gets the node
+  // namespace prepended (map -> unitree2/map); a leading '/' opts out (slash stripped,
+  // since tf2 disallows leading slashes in frame ids).
+  {
+    std::string ns = get_namespace();                       // "/unitree2" or "/"
+    ns             = (ns == "/") ? "" : ns.substr(1) + "/"; // "unitree2/" or ""
+    auto qualify   = [&](std::string& f) {
+      if (f.empty()) return;
+      if (f.front() == '/') f = f.substr(1);
+      else if (!ns.empty()) f = ns + f;
+    };
+    qualify(map_frame_);
+    qualify(odom_frame_);
+    qualify(base_frame_);
+  }
+
   prior_map_voxel_size_ =
       declare_parameter<double>("relocalization.prior_map_voxel_size", 0.4);
   scan_voxel_size_ = declare_parameter<double>("relocalization.scan_voxel_size", 0.4);
