@@ -35,7 +35,7 @@
 
 
     gravity_alignment:
-      enable_gravity_alignment: true  # NOTE: while true, no odom is published until alignment completes
+      enable_gravity_alignment: false  # NOTE: while true, no odom is published until alignment completes
       acc_diff_thr: 0.1                 # motion detected when |mean_acc - init_mean_acc| > this (m/s^2); lower = more sensitive
       num_moving_frames_thr: 10         # consecutive moving frames required before collecting gravity samples
       num_gravity_measurements_thr: 20  # gravity samples averaged to compute the alignment
@@ -99,14 +99,14 @@
       map_pub_interval: 10          # publish map every N scans (0 to disable)
 
     pcd_save:
-      pcd_save_en: true
+      pcd_save_en: false
       save_path: ""                # directory to save scans and poses (empty = <package>/PCD)
       full_map_voxel_size: 0.2        # voxel size for the full accumulated map written on shutdown
       save_individual_scans: false    # if true: save per-interval scan pcds + poses_odom.txt (+ poses_map.txt when relocalized)
       interval: 1                     # how many LiDAR frames merged into each individual scan pcd
 
     relocalization:
-      map_file: "/home/niksta/ros2_ws/src/spark-fast-lio/spark-fast-lio/PCD/full_map.pcd"  # absolute path to prior map .pcd
+      map_file: "/home/niksta/ros2_ws/src/spark-fast-lio/spark_fast_lio/PCD/full_map.pcd"  # absolute path to prior map .pcd
       map_frame: "map"                          # global map frame (matches campus_ouster.rviz Fixed Frame)
       odom_frame: "odom"                        # must match common.map_frame
       base_frame: "base_link"                   # must match common.base_frame

@@ -5,8 +5,8 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /sparse map1/Autocompute Value Bounds1
-        - /pose1/Shape1
+        - /fast-lio sparse map1/Autocompute Value Bounds1
+        - /fast-lio pose1/Shape1
       Splitter Ratio: 0.5
     Tree Height: 895
   - Class: rviz_common/Selection
@@ -26,7 +26,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: curr scan
+    SyncSource: km-sam dense map
 Visualization Manager:
   Class: ""
   Displays:
@@ -60,13 +60,13 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 3833.333251953125
       Min Color: 0; 0; 0
       Min Intensity: 6
-      Name: curr scan
+      Name: fast-lio curr scan
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 3
@@ -78,6 +78,39 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /husky/fast_lio/cloud_registered
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: false
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 2.7671334743499756
+        Min Value: -1.2232962846755981
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 5149
+      Min Color: 0; 0; 0
+      Min Intensity: 6
+      Name: km-sam curr scan
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.009999999776482582
+      Style: Points
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /husky/curr_scan
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -99,7 +132,7 @@ Visualization Manager:
       Max Intensity: 5387
       Min Color: 0; 0; 0
       Min Intensity: 4
-      Name: sparse map
+      Name: fast-lio sparse map
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 1
@@ -117,8 +150,8 @@ Visualization Manager:
     - Alpha: 0.019999999552965164
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 2.3700110912323
-        Min Value: -1.3550009727478027
+        Max Value: 2.5143401622772217
+        Min Value: -1.4077004194259644
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -126,13 +159,13 @@ Visualization Manager:
       Color: 248; 228; 92
       Color Transformer: AxisColor
       Decay Time: 1000
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 2432.571533203125
       Min Color: 0; 0; 0
       Min Intensity: 5
-      Name: dense map
+      Name: fast-lio dense map
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 1
@@ -144,6 +177,72 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /husky/fast_lio/cloud_registered
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: false
+    - Alpha: 0.30000001192092896
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 3.702533721923828
+        Min Value: -2.491985559463501
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: AxisColor
+      Decay Time: 0
+      Enabled: false
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 4726
+      Min Color: 0; 0; 0
+      Min Intensity: 5
+      Name: km-sam sparse  map
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 1
+      Size (m): 0.009999999776482582
+      Style: Points
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /husky/global_map
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: false
+    - Alpha: 0.009999999776482582
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 2.7389416694641113
+        Min Value: -1.4249904155731201
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: AxisColor
+      Decay Time: 1000
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 3376.75
+      Min Color: 0; 0; 0
+      Min Intensity: 6
+      Name: km-sam dense map
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 1
+      Size (m): 0.009999999776482582
+      Style: Points
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /husky/curr_scan
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -164,9 +263,9 @@ Visualization Manager:
           Scale: 1
           Value: true
         Value: true
-      Enabled: true
+      Enabled: false
       Keep: 1
-      Name: pose
+      Name: fast-lio pose
       Position Tolerance: 0.10000000149011612
       Shape:
         Alpha: 1
@@ -185,6 +284,45 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /husky/odometry
+      Value: false
+    - Angle Tolerance: 0.10000000149011612
+      Class: rviz_default_plugins/Odometry
+      Covariance:
+        Orientation:
+          Alpha: 0.5
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: true
+        Position:
+          Alpha: 0.30000001192092896
+          Color: 204; 51; 204
+          Scale: 1
+          Value: true
+        Value: true
+      Enabled: true
+      Keep: 1
+      Name: km-sam pose
+      Position Tolerance: 0.10000000149011612
+      Shape:
+        Alpha: 1
+        Axes Length: 0.75
+        Axes Radius: 0.33000001311302185
+        Color: 255; 25; 0
+        Head Length: 0.30000001192092896
+        Head Radius: 0.10000000149011612
+        Shaft Length: 1
+        Shaft Radius: 0.05000000074505806
+        Value: Axes
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /husky/odom_corrected
       Value: true
     - Alpha: 1
       Buffer Length: 1
@@ -196,7 +334,7 @@ Visualization Manager:
       Length: 1
       Line Style: Billboards
       Line Width: 0.10000000149011612
-      Name: path
+      Name: fast-lio path
       Offset:
         X: 0
         Y: 0
@@ -214,10 +352,64 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /husky/fast_lio/path
       Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 249; 240; 107
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Billboards
+      Line Width: 0.10000000149011612
+      Name: km-sam path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /husky/path/corrected
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: km-sam lc edges
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /husky/loop_detection
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: false
+      Name: km-sam lc radius
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /husky/loop_detection_radius
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0
-    Fixed Frame: husky/odom
+    Fixed Frame: husky/map
     Frame Rate: 30
   Name: root
   Tools:
@@ -260,15 +452,15 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/ThirdPersonFollower
-      Distance: 37.840023040771484
+      Distance: 39.097023010253906
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.5575549602508545
-        Y: -9.611080169677734
+        X: 2.94236421585083
+        Y: -1.634626865386963
         Z: -1.6719695850042626e-06
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
@@ -278,7 +470,7 @@ Visualization Manager:
       Pitch: 1.5697963237762451
       Target Frame: vectornav
       Value: ThirdPersonFollower (rviz_default_plugins)
-      Yaw: 4.698575019836426
+      Yaw: 3.5785653591156006
     Saved: ~
 Window Geometry:
   Displays:
