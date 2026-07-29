@@ -1,10 +1,12 @@
 /**:
   ros__parameters:
     common:
-      lidar_frame: "unitree2/os_lidar"
-      imu_frame: "unitree2/vectornav"
-      map_frame: "unitree2/odom"
-      base_frame: "unitree2/base_link"
+      # Bare names: the node auto-prepends its namespace (e.g. -> unitree2/os_lidar).
+      # Prefix with '/' to opt out (e.g. "/map" stays global, unnamespaced).
+      lidar_frame: "os_lidar"
+      imu_frame: "vectornav"
+      map_frame: "odom"
+      base_frame: "base_link"
       # Frame in which odometry, TF child, and registered clouds are expressed.
       # Options:
       #   "imu"   -> publishes map_frame -> imu_frame   (EKF native; no extrinsic applied)
