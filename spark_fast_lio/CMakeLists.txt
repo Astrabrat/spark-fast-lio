@@ -174,5 +174,10 @@ install(DIRECTORY launch config rviz urdf
   DESTINATION share/${PROJECT_NAME}
 )
 
+# Python nodes (base-station world relay)
+install(PROGRAMS scripts/world_relay.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 # Generate package info
 ament_package()
