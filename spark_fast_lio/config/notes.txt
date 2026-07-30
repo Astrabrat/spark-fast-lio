@@ -1,0 +1,31 @@
+Husky -> explorer, Unitree -> relocalized | Notes
+
+For Husky as explorer/mapper:
+- Use spark-fast-lio/config/husky.yaml
+- Launch front-end: ros2 launch spark_fast_lio mapping_husky.launch.py
+    - imu is used as base_link, if you want to offset that there are params publish_base_to_lidar_tf, publish_base_to_lidar_imu and extrinsic_T, extrinsic_R in the config file.
+    - if you want to use external urdf for the static tfs, then set to false.
+    - fast-lio outputs husky/odom.
+- To make a "nice" map, launch KISS-Matcher as well.
+- In KISS-Matcher/ros there is the husky_slam.yaml. You can configure the directory for saving the map.
+- Launch back-end: ros2 launch kiss_matcher_ros husky_km_sam_fast_lio.launch.yaml 
+- KISS-Matcher provides the husky/map--husky/odom tf. 
+- At any moment you wish to save the map, in a new terminal, run:
+    - ros2 topic pub --once /husky/save_dir std_msgs/msg/String "{data: ''}"
+    - This will save the map, scans and poses in the preconfigured directory. 
+
+For Unitree as relocalized:
+- Use spark-fast-lio/config/unitree.yaml
+    - You can set the path to the husky prior .pcd map in the config file. The relocalization will be done against that map.
+- Launch front-end: ros2 launch spark_fast_lio relocalization_unitree.launch.py
+    - You should see the prior map and prior path.
+    - Move a bit to gravity align first, then you will see your current scan. 
+    - You need to provide an initial pose from rviz or from terminal by publishing in /initialpose.
+- Relocalization fast-lio provides both unitree/odom and unitree/map--unitree/odom tf.
+- You can walk outside the prior map, configured in the config file in "coverage_gate_enabled: true".
+- If you want to save the map with fast-lio you need to preconfigure it in the config and it saves upon exit.
+
+In this package there is also the world_tf.launch.py
+- It provides a world->map tf, which is useful for rviz visualization. 
+- It subscribes to the /namespaces/tf /namespaces/tf_static topics and republishes into /tf /tf_static.
+- This is a temporary solution until we fix something proper.

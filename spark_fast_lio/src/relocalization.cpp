@@ -2,6 +2,11 @@
 
 #include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <limits>
+#include <sstream>
+#include <vector>
 
 #include <Eigen/Geometry>
 #include <geometry_msgs/msg/transform_stamped.hpp>
@@ -50,6 +55,42 @@ geometry_msgs::msg::TransformStamped isoToTfMsg(const Eigen::Isometry3d& T,
   return tf;
 }
 
+// Parse a mapping trajectory into map-frame positions. Supports TUM
+// (t x y z qx qy qz qw) and KITTI (12-value row-major 3x4 [R|t]); "auto" picks
+// KITTI when a line has >=12 numbers, otherwise TUM. Comment lines (#) skipped.
+bool parseTrajectory(const std::string& path, const std::string& fmt,
+                     std::vector<Eigen::Vector3d>& out) {
+  std::ifstream f(path);
+  if (!f.is_open()) return false;
+  std::string line;
+  while (std::getline(f, line)) {
+    if (line.empty() || line[0] == '#') continue;
+    std::istringstream ss(line);
+    std::vector<double> v;
+    double x;
+    while (ss >> x) v.push_back(x);
+    const std::string use_fmt =
+        (fmt == "auto") ? (v.size() >= 12 ? "kitti" : "tum") : fmt;
+    if (use_fmt == "kitti" && v.size() >= 12) {
+      out.emplace_back(v[3], v[7], v[11]);
+    } else if (v.size() >= 4) {  // tum: t x y z ...
+      out.emplace_back(v[1], v[2], v[3]);
+    }
+  }
+  return !out.empty();
+}
+
+// Look for a trajectory next to the prior map .pcd. map-frame files preferred.
+std::string autoDetectTrajectory(const std::string& map_file) {
+  namespace fs = std::filesystem;
+  const fs::path dir = fs::path(map_file).parent_path();
+  for (const char* c : {"poses_tum.txt", "poses_map.txt", "poses_kitti.txt"}) {
+    const fs::path p = dir / c;
+    if (fs::exists(p)) return p.string();
+  }
+  return "";
+}
+
 }  // namespace
 
 Relocalization::Relocalization(const rclcpp::NodeOptions& options)
@@ -62,6 +103,23 @@ Relocalization::Relocalization(const rclcpp::NodeOptions& options)
   map_frame_  = declare_parameter<std::string>("relocalization.map_frame", "map");
   odom_frame_ = declare_parameter<std::string>("relocalization.odom_frame", "odom");
   base_frame_ = declare_parameter<std::string>("relocalization.base_frame", "base_link");
+
+  // Namespace the TF frames like spark_fast_lio.cpp: a relative frame gets the node
+  // namespace prepended (map -> unitree2/map); a leading '/' opts out (slash stripped,
+  // since tf2 disallows leading slashes in frame ids).
+  {
+    std::string ns = get_namespace();                       // "/unitree2" or "/"
+    ns             = (ns == "/") ? "" : ns.substr(1) + "/"; // "unitree2/" or ""
+    auto qualify   = [&](std::string& f) {
+      if (f.empty()) return;
+      if (f.front() == '/') f = f.substr(1);
+      else if (!ns.empty()) f = ns + f;
+    };
+    qualify(map_frame_);
+    qualify(odom_frame_);
+    qualify(base_frame_);
+  }
+
   prior_map_voxel_size_ =
       declare_parameter<double>("relocalization.prior_map_voxel_size", 0.4);
   scan_voxel_size_ = declare_parameter<double>("relocalization.scan_voxel_size", 0.4);
@@ -80,6 +138,12 @@ Relocalization::Relocalization(const rclcpp::NodeOptions& options)
       declare_parameter<double>("relocalization.tf_publish_rate_hz", 50.0);
   publish_localized_odom_ =
       declare_parameter<bool>("relocalization.publish_localized_odom", true);
+  coverage_gate_enabled_ =
+      declare_parameter<bool>("relocalization.coverage_gate_enabled", false);
+  coverage_radius_ = declare_parameter<double>("relocalization.coverage_radius", 15.0);
+  trajectory_file_ = declare_parameter<std::string>("relocalization.trajectory_file", "");
+  trajectory_format_ =
+      declare_parameter<std::string>("relocalization.trajectory_format", "auto");
 
   const auto initialpose_topic =
       declare_parameter<std::string>("relocalization.initialpose_topic", "/initialpose");
@@ -89,6 +153,8 @@ Relocalization::Relocalization(const rclcpp::NodeOptions& options)
       declare_parameter<std::string>("topics.odometry", "fast_lio/odometry");
   const auto prior_map_topic =
       declare_parameter<std::string>("relocalization.prior_map_topic", "/prior_map");
+  const auto prior_path_topic =
+      declare_parameter<std::string>("relocalization.prior_path_topic", "fast_lio/prior_path");
   const auto localized_odom_topic =
       declare_parameter<std::string>("relocalization.localized_odom_topic",
                                      "/localized_odometry");
@@ -112,6 +178,23 @@ Relocalization::Relocalization(const rclcpp::NodeOptions& options)
   RCLCPP_INFO(get_logger(), "Downsampled prior map to %zu points (leaf=%.3f)",
               prior_map_ds_->size(), prior_map_voxel_size_);
 
+  // Prior trajectory (proxy for where the map has data; also published as a path).
+  // Loaded independently of the gate so the prior path is always available.
+  {
+    const std::string traj = trajectory_file_.empty() ? autoDetectTrajectory(map_file_)
+                                                       : trajectory_file_;
+    if (!traj.empty()) parseTrajectory(traj, trajectory_format_, traj_positions_);
+    if (coverage_gate_enabled_ && traj_positions_.empty()) {
+      RCLCPP_WARN(get_logger(),
+                  "coverage_gate_enabled but no trajectory found next to the map; gate OFF.");
+      coverage_gate_enabled_ = false;
+    } else if (!traj_positions_.empty()) {
+      RCLCPP_INFO(get_logger(), "Loaded prior trajectory: %zu pts from %s (gate %s).",
+                  traj_positions_.size(), traj.c_str(),
+                  coverage_gate_enabled_ ? "ON" : "OFF");
+    }
+  }
+
   // Publishers
   rclcpp::QoS latched_qos(1);
   latched_qos.transient_local().reliable();
@@ -123,6 +206,27 @@ Relocalization::Relocalization(const rclcpp::NodeOptions& options)
     msg.header.frame_id = map_frame_;
     msg.header.stamp    = now();
     pub_prior_map_->publish(msg);
+  }
+  // Prior path: same latched, one-shot publish as the prior map. Only the mapping
+  // trajectory positions are known, so poses carry identity orientation.
+  pub_prior_path_ = create_publisher<nav_msgs::msg::Path>(prior_path_topic, latched_qos);
+  if (!traj_positions_.empty()) {
+    nav_msgs::msg::Path path;
+    path.header.frame_id = map_frame_;
+    path.header.stamp    = now();
+    path.poses.reserve(traj_positions_.size());
+    for (const auto& p : traj_positions_) {
+      geometry_msgs::msg::PoseStamped ps;
+      ps.header             = path.header;
+      ps.pose.position.x    = p.x();
+      ps.pose.position.y    = p.y();
+      ps.pose.position.z    = p.z();
+      ps.pose.orientation.w = 1.0;
+      path.poses.push_back(ps);
+    }
+    pub_prior_path_->publish(path);
+    RCLCPP_INFO(get_logger(), "Published prior path (%zu poses) on %s.",
+                path.poses.size(), prior_path_topic.c_str());
   }
   if (publish_localized_odom_) {
     pub_localized_odom_ =
@@ -310,6 +414,16 @@ void Relocalization::publishLocalizedOdom(const rclcpp::Time& stamp) {
   pub_localized_odom_->publish(out);
 }
 
+bool Relocalization::insideCoverage(const Eigen::Vector3d& p_map) const {
+  if (traj_positions_.empty()) return true;
+  // ponytail: linear nearest-point scan; swap for a kd-tree if trajectories get huge.
+  double best_sq = std::numeric_limits<double>::max();
+  for (const auto& t : traj_positions_) {
+    best_sq = std::min(best_sq, (t - p_map).squaredNorm());
+  }
+  return best_sq <= coverage_radius_ * coverage_radius_;
+}
+
 void Relocalization::correctionLoop() {
   const double period_s     = 1.0 / std::max(1e-3, correction_rate_hz_);
   const auto period_chrono  = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -321,11 +435,27 @@ void Relocalization::correctionLoop() {
 
     PointCloudT::Ptr scan_copy;
     Eigen::Isometry3d map_T_odom_guess;
+    Eigen::Isometry3d odom_T_body;
     {
       std::lock_guard<std::mutex> lk(mutex_);
       if (!has_scan_) continue;
       scan_copy        = latest_scan_in_odom_;
       map_T_odom_guess = map_T_odom_;
+      odom_T_body      = latest_odom_T_body_;
+    }
+
+    // Coverage gate: outside the mapped area, scan-to-prior-map GICP has no valid
+    // target and would corrupt the correction. Freeze map<-odom (odom dead-reckons
+    // the robot forward) and resume once back inside.
+    if (coverage_gate_enabled_) {
+      const Eigen::Vector3d p_map = (map_T_odom_guess * odom_T_body).translation();
+      const bool inside = insideCoverage(p_map);
+      if (inside != inside_coverage_.exchange(inside)) {
+        RCLCPP_INFO(get_logger(), inside
+            ? "Back inside prior-map coverage; resuming scan-to-map correction."
+            : "Left prior-map coverage; pausing scan-to-map correction (odom dead-reckons).");
+      }
+      if (!inside) continue;
     }
 
     Eigen::Isometry3d map_T_odom_new;

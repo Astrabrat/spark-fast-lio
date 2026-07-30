@@ -62,13 +62,13 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('spark_fast_lio')
-    default_config = os.path.join(pkg_share, 'config', 'unitree.yaml')
-    default_rviz = os.path.join(pkg_share, 'rviz', 'unitree_reloc.rviz')
+    default_config = os.path.join(pkg_share, 'config', 'husky.yaml')
+    default_rviz = os.path.join(pkg_share, 'rviz', 'husky_reloc.rviz')
 
     return LaunchDescription([
-        DeclareLaunchArgument('namespace', default_value='unitree',
+        DeclareLaunchArgument('namespace', default_value='husky',
                               description='Namespace for LIO topics (e.g. robot1)'),
-        DeclareLaunchArgument('start_rviz', default_value='true',
+        DeclareLaunchArgument('start_rviz', default_value='false',
                               description='automatically start rviz'),
         DeclareLaunchArgument('use_sim_time', default_value='false',
                               description='use /clock from bag playback'),

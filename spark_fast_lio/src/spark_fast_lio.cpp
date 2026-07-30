@@ -50,6 +50,24 @@ SPARKFastLIO2::SPARKFastLIO2(const rclcpp::NodeOptions &options)
   base_frame_    = declare_parameter<std::string>("common.base_frame", "");
   imu_frame_     = declare_parameter<std::string>("common.imu_frame", "imu");
   viz_frame_     = declare_parameter<std::string>("common.visualization_frame", "imu");
+
+  // Namespace the TF frames like topics: a relative frame gets the node namespace
+  // prepended (odom -> unitree2/odom); a leading '/' means absolute -> opt out of
+  // namespacing (slash stripped, since tf2 disallows leading slashes in frame ids).
+  {
+    std::string ns = get_namespace();                  // "/unitree2" or "/"
+    ns             = (ns == "/") ? "" : ns.substr(1) + "/";  // "unitree2/" or ""
+    auto qualify   = [&](std::string &f) {
+      if (f.empty()) return;
+      if (f.front() == '/') f = f.substr(1);           // absolute -> strip slash, no ns
+      else if (!ns.empty()) f = ns + f;                // relative -> prepend namespace
+    };
+    qualify(map_frame_);
+    qualify(lidar_frame_);
+    qualify(base_frame_);
+    qualify(imu_frame_);
+  }
+
   time_sync_en_  = declare_parameter<bool>("common.time_sync_en", false);
 
   filter_size_map_min_ = declare_parameter<double>("filter_size_map", 0.5);
@@ -95,6 +113,14 @@ SPARKFastLIO2::SPARKFastLIO2(const rclcpp::NodeOptions &options)
   full_map_voxel_size_      = declare_parameter<double>("pcd_save.full_map_voxel_size", 0.2);
   save_individual_scans_en_ = declare_parameter<bool>("pcd_save.save_individual_scans", false);
   reloc_map_frame_          = declare_parameter<std::string>("relocalization.map_frame", "");
+  {  // Namespace like the other frames so the map<-odom TF lookup matches the reloc node.
+    std::string ns = get_namespace();
+    ns             = (ns == "/") ? "" : ns.substr(1) + "/";
+    if (!reloc_map_frame_.empty()) {
+      if (reloc_map_frame_.front() == '/') reloc_map_frame_ = reloc_map_frame_.substr(1);
+      else if (!ns.empty()) reloc_map_frame_ = ns + reloc_map_frame_;
+    }
+  }
   map_pub_interval_     = declare_parameter<int>("publish.map_pub_interval", 10);
 
   point_filter_num_ = declare_parameter<int>("point_filter_num", 4);
