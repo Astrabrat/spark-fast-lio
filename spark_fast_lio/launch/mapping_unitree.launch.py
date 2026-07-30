@@ -46,6 +46,7 @@ def launch_setup(context, *args, **kwargs):
     config_path = LaunchConfiguration('config_path').perform(context)
     rviz_path = LaunchConfiguration('rviz_path').perform(context)
     namespace = LaunchConfiguration('namespace')
+    use_sim_time = LaunchConfiguration('use_sim_time').perform(context).lower() == 'true'
 
     with open(config_path, 'r') as f:
         cfg = yaml.safe_load(f)
@@ -64,7 +65,8 @@ def launch_setup(context, *args, **kwargs):
         namespace=namespace,
         output='screen',
         on_exit=Shutdown(),
-        parameters=[config_path],
+        remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
+        parameters=[config_path, {'use_sim_time': use_sim_time}],
     )
 
     static_tf_node = Node(
@@ -89,27 +91,32 @@ def launch_setup(context, *args, **kwargs):
         package='rviz2',
         executable='rviz2',
         name='rviz',
+        namespace=namespace,
         prefix='nice',
         output='screen',
         arguments=['-d', rviz_path],
+        remappings=[('/tf', 'tf'), ('/tf_static', 'tf_static')],
+        parameters=[{'use_sim_time': use_sim_time}],
         condition=IfCondition(LaunchConfiguration('start_rviz')),
     )
 
-    return [lio_node, 
+    return [lio_node,
             #static_tf_node,
             rviz_node]
 
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('spark_fast_lio')
-    default_config = os.path.join(pkg_share, 'config', 'ouster_unitree.yaml')
-    default_rviz = os.path.join(pkg_share, 'rviz', 'fast_lio_walp2.rviz')
+    default_config = os.path.join(pkg_share, 'config', 'unitree.yaml')
+    default_rviz = os.path.join(pkg_share, 'rviz', 'unitree.rviz')
 
     return LaunchDescription([
-        DeclareLaunchArgument('namespace', default_value='',
+        DeclareLaunchArgument('namespace', default_value='unitree',
                               description='Namespace for LIO topics (e.g. robot1)'),
-        DeclareLaunchArgument('start_rviz', default_value='false',
+        DeclareLaunchArgument('start_rviz', default_value='true',
                               description='automatically start rviz'),
+        DeclareLaunchArgument('use_sim_time', default_value='false',
+                              description='use /clock from bag playback'),
         DeclareLaunchArgument('config_path', default_value=default_config,
                               description='Model-specific configuration'),
         DeclareLaunchArgument('rviz_path', default_value=default_rviz,

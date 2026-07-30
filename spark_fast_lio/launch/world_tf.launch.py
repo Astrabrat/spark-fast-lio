@@ -44,7 +44,7 @@ def generate_launch_description():
     default_rviz = os.path.join(pkg_share, 'rviz', 'world.rviz')
 
     return LaunchDescription([
-        DeclareLaunchArgument('robots', default_value='husky,unitree2',
+        DeclareLaunchArgument('robots', default_value='husky,unitree',
                               description='Comma-separated robot namespaces to link into world'),
         DeclareLaunchArgument('world_frame', default_value='world',
                               description='Shared root frame'),

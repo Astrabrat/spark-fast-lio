@@ -97,19 +97,19 @@
       map_pub_interval: 10          # publish map every N scans (0 to disable)
 
     pcd_save:
-      pcd_save_en: true
+      pcd_save_en: false
       save_path: ""                # directory to save scans and poses (empty = <package>/PCD)
       full_map_voxel_size: 0.2        # voxel size for the full accumulated map written on shutdown
       save_individual_scans: false    # if true: save per-interval scan pcds + poses_odom.txt (+ poses_map.txt when relocalized)
       interval: 1                     # how many LiDAR frames merged into each individual scan pcd
 
     relocalization:
-      map_file: "/home/niksta/Documents/persephone/full_map.pcd"  # absolute path to prior map .pcd
+      map_file: "/home/niksta/ros2_ws/src/KISS-Matcher/ros/data/unitree_lab/unitree_lab/unitree_lab_map.pcd"  # absolute path to prior map .pcd
       map_frame: "map"                          # global map frame (matches campus_ouster.rviz Fixed Frame)
       odom_frame: "odom"                        # must match common.map_frame
       base_frame: "base_link"                   # must match common.base_frame
-      prior_map_voxel_size: 0.5
-      scan_voxel_size: 0.5
+      prior_map_voxel_size: 0.2
+      scan_voxel_size: 0.2
       initialpose_topic: "/initialpose"
       prior_map_topic: "fast_lio/prior_map"
       localized_odom_topic: "fast_lio/relocalized_odometry"
@@ -118,7 +118,7 @@
       correction_rate_hz: 0.5
       tf_publish_rate_hz: 20.0
       gicp:
-        max_correspondence_distance_init: 5.0
+        max_correspondence_distance_init: 3.0
         max_correspondence_distance_track: 1.0
         max_iterations: 50
         transformation_epsilon: 1.0e-4
