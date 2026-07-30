@@ -19,14 +19,11 @@
       # as static TFs itself (instead of relying on URDF / ouster driver / external publishers).
       # When BOTH flags below are true, mapping.extrinsic_T/R (IMU->LiDAR) is auto-derived from
       # these matrices and the values in mapping.extrinsic_T/R are ignored.
-      # lidar 20cm above base; os_lidar is Rz(180) vs os_sensor (Ouster lidar_to_sensor_transform).
       publish_base_to_lidar_tf: true
       base_T_lidar: [0.0, 0.0, 0.20]
       base_R_lidar: [ 1.0, 0.0, 0.0,
                       0.0, 1.0, 0.0,
                       0.0, 0.0, 1.0]
-      # vectornav is physically mounted flipped: bag base->vectornav quat=[1,0,0,0] = Rx(180).
-      # This is NOT identity - assuming so inverts gravity and the LIO drifts immediately.
       publish_base_to_imu_tf: true
       base_T_imu: [0.0, 0.0, 0.0]
       base_R_imu: [1.0, 0.0, 0.0,
@@ -67,7 +64,7 @@
       #  - [0.0, 0.0, 0.0, 1.0]
       # However, this matrix is tranformation of IMU w.r.t. LiDAR frame.
       # What we need is transformation LiDAR w.r.t. (or to) IMU frame; thus, the inverse matrix should be given
-      # Ignored while both publish_base_to_*_tf are true. Auto-derived imu->lidar = Ry(180), T=[0,0,-0.2].
+      # Ignored while both publish_base_to_*_tf are true.
       extrinsic_T: [0.0, 0.0, -0.2]
       extrinsic_R: [ 1.0, 0.0, 0.0,
                      0.0, 1.0, 0.0,
