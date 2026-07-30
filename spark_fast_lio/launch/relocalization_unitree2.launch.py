@@ -68,9 +68,9 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('namespace', default_value='unitree2',
                               description='Namespace for LIO topics (e.g. robot1)'),
-        DeclareLaunchArgument('start_rviz', default_value='true',
+        DeclareLaunchArgument('start_rviz', default_value='false',
                               description='automatically start rviz'),
-        DeclareLaunchArgument('use_sim_time', default_value='true',
+        DeclareLaunchArgument('use_sim_time', default_value='false',
                               description='use /clock from bag playback'),
         DeclareLaunchArgument('status_topic', default_value='fast_lio/relocalization_status',
                               description='reloc status topic; enables relocalization mode'),
