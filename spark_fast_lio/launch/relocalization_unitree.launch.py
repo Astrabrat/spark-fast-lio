@@ -68,7 +68,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('namespace', default_value='unitree',
                               description='Namespace for LIO topics (e.g. robot1)'),
-        DeclareLaunchArgument('start_rviz', default_value='false',
+        DeclareLaunchArgument('start_rviz', default_value='true',
                               description='automatically start rviz'),
         DeclareLaunchArgument('use_sim_time', default_value='false',
                               description='use /clock from bag playback'),

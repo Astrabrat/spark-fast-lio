@@ -6,10 +6,12 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <Eigen/Geometry>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#include <nav_msgs/msg/path.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -34,6 +36,10 @@ class Relocalization : public rclcpp::Node {
 
   void correctionLoop();
   void broadcastMapToOdomTf(const rclcpp::Time& stamp);
+
+  // True if p_map is within coverage_radius_ of the nearest prior-map trajectory
+  // point (i.e. inside the area the prior map actually covers).
+  bool insideCoverage(const Eigen::Vector3d& p_map) const;
 
   bool runGicp(const PointCloudT::Ptr& scan_in_odom,
                const Eigen::Isometry3d& map_T_odom_guess,
@@ -60,6 +66,14 @@ class Relocalization : public rclcpp::Node {
   double tf_publish_rate_hz_{50.0};
   bool publish_localized_odom_{true};
 
+  // Coverage gate: pause scan-to-prior-map correction when leaving the mapped area.
+  bool coverage_gate_enabled_{false};
+  double coverage_radius_{15.0};
+  std::string trajectory_file_;
+  std::string trajectory_format_{"auto"};        // "auto" | "tum" | "kitti"
+  std::vector<Eigen::Vector3d> traj_positions_;  // map frame; read-only after init
+  std::atomic<bool> inside_coverage_{true};
+
   // State (protected by mutex_)
   std::mutex mutex_;
   Eigen::Isometry3d map_T_odom_{Eigen::Isometry3d::Identity()};
@@ -78,6 +92,7 @@ class Relocalization : public rclcpp::Node {
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_cloud_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr sub_odom_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_prior_map_;
+  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_prior_path_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_localized_odom_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub_status_;
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;

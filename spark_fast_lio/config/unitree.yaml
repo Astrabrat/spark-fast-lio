@@ -119,6 +119,14 @@
       publish_localized_odom: true
       correction_rate_hz: 0.5
       tf_publish_rate_hz: 20.0
+      # Coverage gate: keep running past the edge of the prior map. When the robot
+      # is farther than coverage_radius from the nearest prior-map trajectory point,
+      # scan-to-map registration pauses (map<-odom frozen, odom dead-reckons) and
+      # resumes on re-entry. Trajectory auto-found next to the map (.pcd folder).
+      coverage_gate_enabled: true
+      coverage_radius: 5.0              # [m] distance from mapped trajectory before pausing
+      trajectory_file: ""               # empty = auto-detect (poses_tum.txt / poses_map.txt / poses_kitti.txt)
+      trajectory_format: "auto"         # auto | tum | kitti
       gicp:
         max_correspondence_distance_init: 3.0
         max_correspondence_distance_track: 1.0
