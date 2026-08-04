@@ -834,6 +834,14 @@ void SPARKFastLIO2::mapIncremental() {
     pointBodyToWorld(
         &(feats_down_body_->points[i]), &(feats_down_world_->points[i]), latest_state_);
 
+    // Guard against NaN/Inf sneaking into the map (e.g. from an unfiltered sensor point
+    // or a diverged state): the ikd-tree's comparisons are undefined for non-finite
+    // coordinates and can corrupt the tree for otherwise-valid neighboring points.
+    const auto &wp = feats_down_world_->points[i];
+    if (!std::isfinite(wp.x) || !std::isfinite(wp.y) || !std::isfinite(wp.z)) {
+      continue;
+    }
+
     // decide if we need to add to map
     if (!nearest_points_[i].empty() && flg_EKF_inited_) {
       const PointVector &points_near = nearest_points_[i];

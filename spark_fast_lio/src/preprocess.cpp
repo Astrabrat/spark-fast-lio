@@ -1,5 +1,7 @@
 #include "preprocess.h"
 
+#include <cmath>
+
 #define RETURN0 0x00
 #define RETURN0AND1 0x10
 
@@ -225,6 +227,10 @@ void Preprocess::oust64_handler(const sensor_msgs::msg::PointCloud2 &msg) {
     }
 
     for (uint i = 0; i < plsize; i++) {
+      if (!std::isfinite(pl_orig.points[i].x) || !std::isfinite(pl_orig.points[i].y) ||
+          !std::isfinite(pl_orig.points[i].z)) {
+        continue;
+      }
       double range = pl_orig.points[i].x * pl_orig.points[i].x +
                      pl_orig.points[i].y * pl_orig.points[i].y +
                      pl_orig.points[i].z * pl_orig.points[i].z;
@@ -269,6 +275,11 @@ void Preprocess::oust64_handler(const sensor_msgs::msg::PointCloud2 &msg) {
   } else {
     for (size_t i = 0; i < pl_orig.points.size(); i++) {
       if (i % point_filter_num != 0) continue;
+
+      if (!std::isfinite(pl_orig.points[i].x) || !std::isfinite(pl_orig.points[i].y) ||
+          !std::isfinite(pl_orig.points[i].z)) {
+        continue;
+      }
 
       double range = pl_orig.points[i].x * pl_orig.points[i].x +
                      pl_orig.points[i].y * pl_orig.points[i].y +
@@ -322,6 +333,10 @@ void Preprocess::kmoust64_handler(const sensor_msgs::msg::PointCloud2 &msg) {
     }
 
     for (uint i = 0; i < plsize; i++) {
+      if (!std::isfinite(pl_orig.points[i].x) || !std::isfinite(pl_orig.points[i].y) ||
+          !std::isfinite(pl_orig.points[i].z)) {
+        continue;
+      }
       double range = pl_orig.points[i].x * pl_orig.points[i].x +
                      pl_orig.points[i].y * pl_orig.points[i].y +
                      pl_orig.points[i].z * pl_orig.points[i].z;
@@ -370,6 +385,11 @@ void Preprocess::kmoust64_handler(const sensor_msgs::msg::PointCloud2 &msg) {
   } else {
     for (size_t i = 0; i < pl_orig.points.size(); i++) {
       if (i % point_filter_num != 0) continue;
+
+      if (!std::isfinite(pl_orig.points[i].x) || !std::isfinite(pl_orig.points[i].y) ||
+          !std::isfinite(pl_orig.points[i].z)) {
+        continue;
+      }
 
       double range = pl_orig.points[i].x * pl_orig.points[i].x +
                      pl_orig.points[i].y * pl_orig.points[i].y +
@@ -431,6 +451,10 @@ void Preprocess::velodyne_handler(const sensor_msgs::msg::PointCloud2 &msg) {
       added_pt.normal_z = 0;
       int layer         = pl_orig.points[i].ring;
       if (layer >= N_SCANS) continue;
+      if (!std::isfinite(pl_orig.points[i].x) || !std::isfinite(pl_orig.points[i].y) ||
+          !std::isfinite(pl_orig.points[i].z)) {
+        continue;
+      }
       added_pt.x         = pl_orig.points[i].x;
       added_pt.y         = pl_orig.points[i].y;
       added_pt.z         = pl_orig.points[i].z;
@@ -489,6 +513,10 @@ void Preprocess::velodyne_handler(const sensor_msgs::msg::PointCloud2 &msg) {
       added_pt.normal_x  = 0;
       added_pt.normal_y  = 0;
       added_pt.normal_z  = 0;
+      if (!std::isfinite(pl_orig.points[i].x) || !std::isfinite(pl_orig.points[i].y) ||
+          !std::isfinite(pl_orig.points[i].z)) {
+        continue;
+      }
       added_pt.x         = pl_orig.points[i].x;
       added_pt.y         = pl_orig.points[i].y;
       added_pt.z         = pl_orig.points[i].z;
