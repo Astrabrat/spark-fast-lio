@@ -1,0 +1,209 @@
+/**:
+  ros__parameters:
+    common:
+      # Bare names: the node auto-prepends its namespace (e.g. -> husky/os_sensor).
+      # Prefix with '/' to opt out (e.g. "/map" stays global, unnamespaced).
+      lidar_frame: "os_sensor"
+      imu_frame: "vectornav"
+      map_frame: "odom"
+      base_frame: "base_link"
+      # Frame in which odometry, TF child, and registered clouds are expressed.
+      # Options:
+      #   "imu"   -> publishes map_frame -> imu_frame   (EKF native; no extrinsic applied)
+      #   "lidar" -> publishes map_frame -> lidar_frame (IMU pose composed with IMU->LiDAR extrinsic)
+      #   "base"  -> publishes map_frame -> base_frame  (IMU pose composed with IMU->base extrinsic;
+      #                                                  requires base_frame set and base->lidar TF available)
+      visualization_frame: "base"
+
+      # Optional: let spark-fast-lio broadcast base_frame->lidar_frame and base_frame->imu_frame
+      # as static TFs itself (instead of relying on URDF / ouster driver / external publishers).
+      # When BOTH flags below are true, mapping.extrinsic_T/R (IMU->LiDAR) is auto-derived from
+      # these matrices and the values in mapping.extrinsic_T/R are ignored.
+      # From bag /husky/tf_static: husky/base_link -> husky/os_sensor is identity
+      publish_base_to_lidar_tf: true
+      base_T_lidar: [0.0, 0.0, 0.2]
+      base_R_lidar: [1.0, 0.0, 0.0,
+                     0.0, 1.0, 0.0,
+                     0.0, 0.0, 1.0]
+      # From bag: husky/base_link -> husky/vectornav
+      publish_base_to_imu_tf: true
+      base_T_imu: [0.0, 0.0, 0.0]
+      base_R_imu: [1.0, 0.0, 0.0,
+                   0.0, 1.0, 0.0,
+                   0.0, 0.0, 1.0]
+
+
+    gravity_alignment:
+      enable_gravity_alignment: true  # NOTE: while true, no odom is published until alignment completes
+      acc_diff_thr: 0.1                 # motion detected when |mean_acc - init_mean_acc| > this (m/s^2); lower = more sensitive
+      num_moving_frames_thr: 10         # consecutive moving frames required before collecting gravity samples
+      num_gravity_measurements_thr: 20  # gravity samples averaged to compute the alignment
+      g_base: [0.0, 0.0, -1.0]          # target gravity direction in base_frame
+
+    preprocess:
+      lidar_type: 3               # 1 for Livox serials LiDAR, 2 for Velodyne LiDAR, 3 for ouster LiDAR,
+      scan_line: 32
+      scan_rate: 10               # only need to be set for velodyne, unit: Hz,
+      timestamp_unit: 3           # the unit of time/t field in the PointCloud2 rostopic: 0-second, 1-milisecond, 2-microsecond, 3-nanosecond.
+      blind: 1.0
+      blind_for_human_pilot: 1.0  # This parameter is to reject cloud points from human pilots
+
+    mapping:
+      acc_cov: 0.1
+      gyr_cov: 0.1
+      b_acc_cov: 0.0001
+      b_gyr_cov: 0.0001
+      fov_degree: 360.0
+      det_range: 100.0
+      extrinsic_est_en: false      # true: enable the online estimation of IMU-LiDAR extrinsic,
+
+      # NOTE(hlim): In `vbr_calib.yaml`, it says:
+      #imu:
+      #  T_b:
+      #  - [0.9994652045891429, 0.03194161690749185, -0.00698788259543323, -0.045630250613467524]
+      #  - [-0.03200263570684775, 0.9994490166874298, -0.008798074077210848, -0.00784852988506693]
+      #  - [0.006703021917434096, 0.009017052443448963, 0.9999368527795895, -0.6084150115067585]
+      #  - [0.0, 0.0, 0.0, 1.0]
+      # However, this matrix is tranformation of IMU w.r.t. LiDAR frame.
+      # What we need is transformation LiDAR w.r.t. (or to) IMU frame; thus, the inverse matrix should be given
+      extrinsic_T: [0.0, 0.0,-0.2]
+      extrinsic_R: [1.0, 0.0, 0.0,
+                    0.0, 1.0, 0.0,
+                    0.0, 0.0, 1.0]
+
+    filter_size_map: 0.25 #.5
+
+    topics:
+      # Subscribers
+      lidar: "ouster/points"
+      # imu: "/imu/data"
+      imu: "vectornav/imu"
+      # Publishers
+      cloud_registered: "fast_lio/cloud_registered"
+      cloud_registered_lidar: "fast_lio/cloud_registered_lidar"
+      cloud_registered_body: "fast_lio/cloud_registered_body"
+      cloud_registered_base: "fast_lio/cloud_registered_base"
+      cloud_map: "fast_lio/cloud_map"
+      odometry: "fast_lio/odometry/imu"
+      path: "fast_lio/path"
+
+    publish:
+      path_en: true
+      scan_publish_en: true        # false: close all the point cloud output
+      dense_publish_en: true       # false: low down the points number in a global-frame point clouds scan.
+      scan_lidarframe_pub_en: true # true: output the point cloud scans in the LiDAR frame
+      scan_bodyframe_pub_en: false  # true: output the point cloud scans in IMU-body frame
+      scan_baseframe_pub_en: false  # true: output the point cloud scans in the base frame
+      map_pub_interval: 10          # publish map every N scans (0 to disable)
+
+    pcd_save:
+      pcd_save_en: false
+      save_path: "/husky/maps/saved_maps"                # directory to save scans and poses (empty = <package>/PCD)
+      full_map_voxel_size: 0.2        # voxel size for the full accumulated map written on shutdown
+      save_individual_scans: false    # if true: save per-interval scan pcds + poses_odom.txt (+ poses_map.txt when relocalized)
+      interval: 1                     # how many LiDAR frames merged into each individual scan pcd
+
+    relocalization:
+      map_file: "/home/husky/maps/recevied_maps/received_latest_map.pcd"  # absolute path to prior map .pcd
+      map_frame: "map"                          # global map frame (matches campus_ouster.rviz Fixed Frame)
+      odom_frame: "odom"                        # must match common.map_frame
+      base_frame: "base_link"                   # must match common.base_frame
+      prior_map_voxel_size: 0.2
+      scan_voxel_size: 0.2
+      initialpose_topic: "/initialpose"
+      prior_map_topic: "fast_lio/prior_map"
+      localized_odom_topic: "odometry/imu"
+      status_topic: ""  # empty = standalone mapping (non-empty makes mapper wait for a relocalization node; blocks stats + pcd save)
+      diagnostic_topic: "fast_lio/relocalization_diagnostic"  # std_msgs/String, one line per attempt
+      publish_localized_odom: true
+      correction_rate_hz: 0.5
+      tf_publish_rate_hz: 20.0  # declared but unused: TF now follows the odometry stamps
+      gicp:
+        max_correspondence_distance_init: 3.0
+        max_correspondence_distance_track: 1.0
+        max_iterations: 50
+        transformation_epsilon: 1.0e-4
+        # fitness_threshold removed: pcl getFitnessScore() is an unbounded
+        # squared-distance average, so its value moves with how much of the
+        # scan falls outside the map. Replaced by correction.min_inlier_ratio.
+
+      # --- Global relocalization (no operator initial pose) ------------------
+      # Runs KISS-Matcher against the prior map until a pose is confirmed, then
+      # hands over to tracking. /initialpose still works and bypasses the search.
+      global:
+        enabled: true
+        attempt_period: 3.0        # s between global attempts while unlocalized
+        min_span: 0.0              # m of travel required before the first attempt;
+                                   # raise to ~5 if the sensor FOV is narrow
+        # 0.2, NOT 0.5. Measured on three sites: the KISS-Matcher correspondence count
+        # collapses as this grows. On the aug08 map: 268 initial pairs at 0.2 against 12
+        # at 0.5, and 0.5 produced zero usable registrations anywhere. Do not raise it,
+        # and do not use extract_prior_map.py's diag/60 suggestion -- on a map whose
+        # bounding box is inflated by sparse long-range returns that reads 5.9.
+        # RELOC_TEST_PLAN.md §7.3.
+        map_voxel_size: 0.2        # prior-map leaf fed to KISS-Matcher
+        voxel_size: 0.2            # KISS-Matcher voxel; drives normal/FPFH radii
+        use_quatro: true           # yaw-dominant motion (ground robot)
+        use_ratio_test: true
+        min_final_inliers: 20      # GNC translation inliers required
+        min_source_points: 2000    # accumulated window must be this dense
+        # 0.85, not 0.5: at 0.5 a measured 10.45 m mis-registration scored 0.515 and
+        # would have been accepted. Live runs score 0.99 when correct, so 0.85 has a
+        # wide margin. §3.1.
+        min_verify_inlier_ratio: 0.85  # GICP refinement must corroborate
+        required_confirmations: 2  # independent agreeing proposals before latching
+        max_confirm_disagreement: 1.0      # m
+        max_confirm_disagreement_deg: 6.0
+
+      # --- Sliding-window scan accumulation ----------------------------------
+      # A single sweep under-constrains z/roll/pitch and gives FPFH too little
+      # structure; odom is locally accurate so stacking a few scans is cheap.
+      accumulator:
+        max_scans: 10
+        max_span: 20.0             # m of path retained
+        min_keyframe_move: 0.5     # m; stops a stationary robot filling the window
+
+      # --- Prior-map submap cropping -----------------------------------------
+      # Bounds the GICP target so covariances are not recomputed over the whole
+      # map every cycle. Re-crops only after the robot moves refresh_move.
+      submap:
+        # SITE-DEPENDENT. Set it to roughly the diagonal of the *core* of the prior map,
+        # not of its raw bounding box -- 97% of a map may sit in 31 x 12 m while the
+        # bounding box reads 272 x 226 m. Used so far: 40 (jul22 lab), 80 (aug08),
+        # 150 (aug11 site). §9.5.
+        radius: 60.0
+        refresh_move: 10.0
+
+      # --- Correction gating --------------------------------------------------
+      correction:
+        alpha: 0.3                 # fraction of the way to the new estimate; 1.0 = old hard overwrite
+        # 0.25, not 0.5: the recorded odom_corrected shows legitimate motion topping out
+        # at 0.099 m per message, and two real discontinuities of 1.07 m and 0.31 m.
+        # 0.5 catches the first and passes the second. §3.5.
+        max_translation_step: 0.25 # m; larger corrections are treated as mis-registrations
+        max_rotation_step_deg: 5.0
+        # 0.70. This is a TRUE-POSITIVE floor, not a safety limit. Correct poses score
+        # 0.783-0.834 while tracking, and 0.85 rejected them: the node hit 15 consecutive
+        # rejections at displacements of 0.001-0.016 m, declared the lock lost, and fell
+        # back to a global search it did not need. At 0.70: zero rejections over a run.
+        # It CANNOT stop a wrong latch. On 2 of 3 measured query windows a pose 5.08 m
+        # from truth scored 0.893, above what the correct pose scored (0.861), so no
+        # value here separates right from wrong. The guards that do are geometric:
+        # max_translation_step, required_confirmations, max_confirm_disagreement.
+        # §8.5, §8.6.
+        min_inlier_ratio: 0.70     # replaces gicp.fitness_threshold
+        inlier_dist: 0.3           # m; saturates above 0.3 and stops discriminating. §3.3
+        max_eval_samples: 5000     # 0 = score every point
+
+      # --- Loss detection -----------------------------------------------------
+      lost_recovery:
+        enabled: true
+        max_consecutive_failures: 15   # then drop back to global search
+
+    verbose: true
+    pcl_verbose: false
+    runtime_pos_log_enable: true
+    point_filter_num_for_preprocessing: 1 # If it is set to `1`, full point cloud gonna be publlished
+    point_filter_num: 2                   # For pose estimation.
+    max_iteration: 4
+    cube_side_length: 1000.0

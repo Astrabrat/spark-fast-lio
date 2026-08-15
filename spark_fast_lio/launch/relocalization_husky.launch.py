@@ -62,7 +62,7 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('spark_fast_lio')
-    default_config = os.path.join(pkg_share, 'config', 'husky.yaml')
+    default_config = os.path.join(pkg_share, 'config', 'husky_reloc.yaml')
     default_rviz = os.path.join(pkg_share, 'rviz', 'husky_reloc.rviz')
 
     return LaunchDescription([
