@@ -1,0 +1,97 @@
+# Relocalization-only config for bag replay (T4/T5 in RELOC_TEST_PLAN.md).
+#
+# Drives `spark_lio_relocalization` alone from a bag that already contains
+# FAST-LIO output, so no mapper is needed and the loop is ~90 s instead of a
+# full mapping run:
+#
+#   ros2 bag play HUSKY_AUG_8/rosbag2_2026_08_06-12_14_28 --clock \
+#     --topics /husky/fast_lio/cloud_registered /husky/odometry/imu /husky/tf_static
+#
+# Thresholds here are the MEASURED values from RELOC_TEST_PLAN.md §3, not the
+# shipped defaults. In particular min_inlier_ratio / min_verify_inlier_ratio are
+# 0.85 rather than 0.4 / 0.5, because the sweep in §3.1 showed a 10.5 m
+# mis-registration still scoring 0.515 — the shipped defaults would latch on it.
+/**:
+  ros__parameters:
+    use_sim_time: true
+
+    topics:
+      cloud_registered: "fast_lio/cloud_registered"
+      odometry: "odometry/imu"          # this bag's LIO odometry topic
+
+    relocalization:
+      # Point this at reloc_test/prior_map_aug08.pcd (or your own map).
+      map_file: ""                      # REQUIRED: set on the command line
+      map_frame: "map"                  # bag publishes husky/map; ns-qualified
+      odom_frame: "odom"
+      base_frame: "base_link"
+
+      prior_map_voxel_size: 0.2
+      scan_voxel_size: 0.2
+
+      initialpose_topic: "/initialpose"  # never published during the test
+      prior_map_topic: "fast_lio/prior_map"
+      localized_odom_topic: "fast_lio/relocalized_odometry"
+      status_topic: "fast_lio/relocalization_status"
+      diagnostic_topic: "fast_lio/relocalization_diagnostic"
+      publish_localized_odom: true
+      correction_rate_hz: 0.5
+
+      gicp:
+        # 3.0 confirmed by §3.2: 5/8/12 do not widen the convergence basin and
+        # raise the wrong-pose inlier ratio 0.592 -> 0.701, shrinking the margin.
+        max_correspondence_distance_init: 3.0
+        max_correspondence_distance_track: 1.0
+        max_iterations: 50
+        transformation_epsilon: 1.0e-4
+
+      global:
+        enabled: true
+        attempt_period: 3.0
+        # Robot does 0.36 m/s median, so 3 m of travel is ~8 s of bag.
+        min_span: 3.0
+        # Map is 70 x 30 m with only 54,753 points. Sweep these in T1 before
+        # trusting them; 0.5 may thin the FPFH target too far on a map this sparse.
+        map_voxel_size: 0.3
+        voxel_size: 0.3
+        use_quatro: true
+        use_ratio_test: true
+        min_final_inliers: 20           # set to ~half the value T1 observes
+        min_source_points: 2000         # 5-scan window gives ~3000 after 0.2 leaf
+        # MEASURED §3.1: converged 0.990, best wrong answer 0.711.
+        min_verify_inlier_ratio: 0.85
+        required_confirmations: 2
+        max_confirm_disagreement: 1.0
+        max_confirm_disagreement_deg: 6.0
+
+      accumulator:
+        # §3.4: 10 consecutive scans add only 46% more points at 0.36 m/s.
+        # The keyframe gate is what makes the window add viewpoints, not scans.
+        max_scans: 10
+        max_span: 20.0
+        min_keyframe_move: 0.5
+
+      submap:
+        # Prior map diagonal is 76.3 m, so this crop is effectively the whole map
+        # here. Re-derive per map with tools/extract_prior_map.py.
+        radius: 80.0
+        refresh_move: 10.0
+
+      correction:
+        alpha: 0.3
+        # §3.5: real jumps of 1.070 m and 0.313 m were observed in this bag's
+        # odom_corrected, against a 0.099 m ceiling on legitimate per-message
+        # motion. 0.5 would have missed the 0.313 m one.
+        max_translation_step: 0.25
+        max_rotation_step_deg: 5.0
+        # §3.1 separation; §3.3 for the distance.
+        min_inlier_ratio: 0.85
+        inlier_dist: 0.3
+        max_eval_samples: 5000
+
+      lost_recovery:
+        enabled: true
+        max_consecutive_failures: 15
+
+      coverage_gate_enabled: false
+      coverage_radius: 15.0

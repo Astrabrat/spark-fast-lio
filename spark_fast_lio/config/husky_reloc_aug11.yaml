@@ -1,0 +1,118 @@
+# Relocalization config for the aug11 inspection site, against a prior map built by
+# kiss_matcher_sam (RELOC_TEST_PLAN.md §8).
+#
+# Drives `spark_lio_relocalization` alone from the recorded bag, which already carries
+# fast_lio output, so no mapper is needed:
+#
+#   BAGS=/…/rosbag2_2026_08_11-11_45_32 RELOC_BAG=/bags \
+#   RELOC_CONFIG=/ws/src/spark-fast-lio/spark_fast_lio/config/husky_reloc_aug11.yaml \
+#   RELOC_MAP=/out/km_map_aug11/husky_aug11/husky_aug11_map.pcd \
+#   ./src/mr-slam/tests/run_reloc_test.sh t4
+#
+# The /ws/src path is deliberate: run_reloc_test.sh mounts the host config directory
+# there, and install/share/.../config only holds symlinks created at build time, so a
+# file added after the build is reachable at the src path and nowhere else.
+/**:
+  ros__parameters:
+    use_sim_time: true
+
+    topics:
+      cloud_registered: "fast_lio/cloud_registered"
+      odometry: "odometry/imu"
+
+    relocalization:
+      map_file: ""                      # REQUIRED: set on the command line
+      map_frame: "map"
+      odom_frame: "odom"
+      base_frame: "base_link"
+
+      prior_map_voxel_size: 0.2
+      scan_voxel_size: 0.2
+
+      initialpose_topic: "/initialpose"  # never published during the test
+      prior_map_topic: "fast_lio/prior_map"
+      localized_odom_topic: "fast_lio/relocalized_odometry"
+      status_topic: "fast_lio/relocalization_status"
+      diagnostic_topic: "fast_lio/relocalization_diagnostic"
+      publish_localized_odom: true
+      correction_rate_hz: 0.5
+
+      gicp:
+        max_correspondence_distance_init: 3.0   # §3.2: confirmed, do not raise
+        max_correspondence_distance_track: 1.0
+        max_iterations: 50
+        transformation_epsilon: 1.0e-4
+
+      global:
+        enabled: true
+        attempt_period: 3.0
+        min_span: 3.0
+        # 0.2, not the 0.5 shipped default and not extract_prior_map.py's diag/60
+        # suggestion (2.37 for this site). §7.3 measured the correspondence count
+        # collapsing with voxel size on this platform's maps -- 268 pairs at 0.2 against
+        # 12 at 0.5 -- so the map-scale heuristic is exactly backwards here.
+        map_voxel_size: 0.2
+        voxel_size: 0.2
+        use_quatro: true
+        use_ratio_test: true
+        # Measured against the kiss_matcher_sam map (§8): 26 / 7 / 9 trans inliers on
+        # three query windows, against 2 / 3 / 0 for the same windows on the decimated
+        # global_map. Half of the best observed, per §5 T1's rule. The shipped 20 would
+        # latch on only one window in three.
+        # This is the loosest number in the file, so the two gates that stop it becoming
+        # a wrong latch matter more than usual here: required_confirmations 2 and
+        # min_verify_inlier_ratio 0.85.
+        min_final_inliers: 13
+        min_source_points: 2000
+        min_verify_inlier_ratio: 0.85   # §3.1: 0.5 would accept a 10.45 m error
+        required_confirmations: 2
+        max_confirm_disagreement: 1.0
+        max_confirm_disagreement_deg: 6.0
+
+      accumulator:
+        max_scans: 10
+        max_span: 20.0
+        min_keyframe_move: 0.5          # §3.4: confirmed
+
+      submap:
+        radius: 150.0                   # map diagonal is 142 m
+        refresh_move: 10.0
+
+      correction:
+        alpha: 0.3
+        max_translation_step: 0.25      # §3.5
+        max_rotation_step_deg: 5.0
+        # 0.85 is §3.1's number, and §3.1 was measured on the aug08 *lab* map. On this
+        # site it rejects correct poses: measured tracking ratios run 0.783-0.834 with
+        # displacements of 0.001-0.016 m, i.e. the pose was already right and only the
+        # ratio was low. The node hit 15 consecutive rejections, declared the lock lost
+        # and fell back to a global search it did not need.
+        #
+        # Note this is a different measurement from global.min_verify_inlier_ratio,
+        # which sees 0.90-0.92 on the same run: verification scores an accumulated
+        # multi-keyframe window against the map, tracking scores a single scan. They
+        # should not share a threshold just because they share a name.
+        #
+        # T3 has now been run on this map, and the answer is that NO value of this
+        # parameter is a safety mechanism here. Three query windows:
+        #
+        #   window   worst converged   best wrong    separated?
+        #   at0.3    0.980             0.460         yes, gap 0.46-0.98
+        #   at0.6    0.861             0.893         NO
+        #   at0.9    0.854             0.894         NO
+        #
+        # On at0.6/at0.9 a pose 5.1 m from truth scores 0.893, *above* what the correct
+        # pose scores (0.861). Those windows are 12 x 63 m -- long and thin, so the scan
+        # slides along its own axis with overlap barely changing. No threshold separates
+        # right from wrong: 0.90 would reject correct poses, 0.85 would accept a 5 m
+        # error, and this value only chooses which mistake to make.
+        #
+        # So 0.70 is chosen to avoid rejecting *true* positives (measured 0.783-0.834),
+        # which is what caused the spurious lock loss at 0.85. It is not, and cannot be,
+        # what stops a wrong latch. The parameters that actually do that here are
+        # geometric, and they are the ones to touch if a wrong latch is ever observed:
+        #   correction.max_translation_step  0.25 m  -- a 5 m slide cannot arrive in one step
+        #   global.required_confirmations    2       -- two independent proposals
+        #   global.max_confirm_disagreement  1.0 m   -- ...that must agree to within 1 m
+        min_inlier_ratio: 0.70
+        inlier_dist: 0.3                # §3.3: saturates above 0.3

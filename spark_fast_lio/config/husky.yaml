@@ -114,15 +114,91 @@
       prior_map_topic: "fast_lio/prior_map"
       localized_odom_topic: "fast_lio/relocalized_odometry"
       status_topic: ""  # empty = standalone mapping (non-empty makes mapper wait for a relocalization node; blocks stats + pcd save)
+      diagnostic_topic: "fast_lio/relocalization_diagnostic"  # std_msgs/String, one line per attempt
       publish_localized_odom: true
       correction_rate_hz: 0.5
-      tf_publish_rate_hz: 20.0
+      tf_publish_rate_hz: 20.0  # declared but unused: TF now follows the odometry stamps
       gicp:
         max_correspondence_distance_init: 3.0
         max_correspondence_distance_track: 1.0
         max_iterations: 50
         transformation_epsilon: 1.0e-4
-        fitness_threshold: 1.0  # accepted if lower than this value
+        # fitness_threshold removed: pcl getFitnessScore() is an unbounded
+        # squared-distance average, so its value moves with how much of the
+        # scan falls outside the map. Replaced by correction.min_inlier_ratio.
+
+      # --- Global relocalization (no operator initial pose) ------------------
+      # Runs KISS-Matcher against the prior map until a pose is confirmed, then
+      # hands over to tracking. /initialpose still works and bypasses the search.
+      global:
+        enabled: true
+        attempt_period: 3.0        # s between global attempts while unlocalized
+        min_span: 0.0              # m of travel required before the first attempt;
+                                   # raise to ~5 if the sensor FOV is narrow
+        # 0.2, NOT 0.5. Measured on three sites: the KISS-Matcher correspondence count
+        # collapses as this grows. On the aug08 map: 268 initial pairs at 0.2 against 12
+        # at 0.5, and 0.5 produced zero usable registrations anywhere. Do not raise it,
+        # and do not use extract_prior_map.py's diag/60 suggestion -- on a map whose
+        # bounding box is inflated by sparse long-range returns that reads 5.9.
+        # RELOC_TEST_PLAN.md §7.3.
+        map_voxel_size: 0.2        # prior-map leaf fed to KISS-Matcher
+        voxel_size: 0.2            # KISS-Matcher voxel; drives normal/FPFH radii
+        use_quatro: true           # yaw-dominant motion (ground robot)
+        use_ratio_test: true
+        min_final_inliers: 20      # GNC translation inliers required
+        min_source_points: 2000    # accumulated window must be this dense
+        # 0.85, not 0.5: at 0.5 a measured 10.45 m mis-registration scored 0.515 and
+        # would have been accepted. Live runs score 0.99 when correct, so 0.85 has a
+        # wide margin. §3.1.
+        min_verify_inlier_ratio: 0.85  # GICP refinement must corroborate
+        required_confirmations: 2  # independent agreeing proposals before latching
+        max_confirm_disagreement: 1.0      # m
+        max_confirm_disagreement_deg: 6.0
+
+      # --- Sliding-window scan accumulation ----------------------------------
+      # A single sweep under-constrains z/roll/pitch and gives FPFH too little
+      # structure; odom is locally accurate so stacking a few scans is cheap.
+      accumulator:
+        max_scans: 10
+        max_span: 20.0             # m of path retained
+        min_keyframe_move: 0.5     # m; stops a stationary robot filling the window
+
+      # --- Prior-map submap cropping -----------------------------------------
+      # Bounds the GICP target so covariances are not recomputed over the whole
+      # map every cycle. Re-crops only after the robot moves refresh_move.
+      submap:
+        # SITE-DEPENDENT. Set it to roughly the diagonal of the *core* of the prior map,
+        # not of its raw bounding box -- 97% of a map may sit in 31 x 12 m while the
+        # bounding box reads 272 x 226 m. Used so far: 40 (jul22 lab), 80 (aug08),
+        # 150 (aug11 site). §9.5.
+        radius: 60.0
+        refresh_move: 10.0
+
+      # --- Correction gating --------------------------------------------------
+      correction:
+        alpha: 0.3                 # fraction of the way to the new estimate; 1.0 = old hard overwrite
+        # 0.25, not 0.5: the recorded odom_corrected shows legitimate motion topping out
+        # at 0.099 m per message, and two real discontinuities of 1.07 m and 0.31 m.
+        # 0.5 catches the first and passes the second. §3.5.
+        max_translation_step: 0.25 # m; larger corrections are treated as mis-registrations
+        max_rotation_step_deg: 5.0
+        # 0.70. This is a TRUE-POSITIVE floor, not a safety limit. Correct poses score
+        # 0.783-0.834 while tracking, and 0.85 rejected them: the node hit 15 consecutive
+        # rejections at displacements of 0.001-0.016 m, declared the lock lost, and fell
+        # back to a global search it did not need. At 0.70: zero rejections over a run.
+        # It CANNOT stop a wrong latch. On 2 of 3 measured query windows a pose 5.08 m
+        # from truth scored 0.893, above what the correct pose scored (0.861), so no
+        # value here separates right from wrong. The guards that do are geometric:
+        # max_translation_step, required_confirmations, max_confirm_disagreement.
+        # §8.5, §8.6.
+        min_inlier_ratio: 0.70     # replaces gicp.fitness_threshold
+        inlier_dist: 0.3           # m; saturates above 0.3 and stops discriminating. §3.3
+        max_eval_samples: 5000     # 0 = score every point
+
+      # --- Loss detection -----------------------------------------------------
+      lost_recovery:
+        enabled: true
+        max_consecutive_failures: 15   # then drop back to global search
 
     verbose: true
     pcl_verbose: false
