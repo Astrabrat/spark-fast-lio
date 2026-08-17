@@ -104,7 +104,7 @@
       interval: 1                     # how many LiDAR frames merged into each individual scan pcd
 
     relocalization:
-      map_file: "/home/husky/maps/recevied_maps/received_latest_map.pcd"  # absolute path to prior map .pcd
+      map_file: "/home/husky/maps/received_maps/received_site_a_map.pcd"  # absolute path to prior map .pcd received_latest_map.pcd
       map_frame: "map"                          # global map frame (matches campus_ouster.rviz Fixed Frame)
       odom_frame: "odom"                        # must match common.map_frame
       base_frame: "base_link"                   # must match common.base_frame
@@ -171,7 +171,7 @@
         # not of its raw bounding box -- 97% of a map may sit in 31 x 12 m while the
         # bounding box reads 272 x 226 m. Used so far: 40 (jul22 lab), 80 (aug08),
         # 150 (aug11 site). §9.5.
-        radius: 60.0
+        radius: 80.0
         refresh_move: 10.0
 
       # --- Correction gating --------------------------------------------------

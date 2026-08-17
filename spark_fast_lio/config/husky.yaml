@@ -191,7 +191,7 @@
         # value here separates right from wrong. The guards that do are geometric:
         # max_translation_step, required_confirmations, max_confirm_disagreement.
         # §8.5, §8.6.
-        min_inlier_ratio: 0.70     # replaces gicp.fitness_threshold
+        min_inlier_ratio: 0.75     # replaces gicp.fitness_threshold
         inlier_dist: 0.3           # m; saturates above 0.3 and stops discriminating. §3.3
         max_eval_samples: 5000     # 0 = score every point
 
