@@ -1,3 +1,4 @@
+
 import os
 
 from ament_index_python.packages import get_package_share_directory
@@ -62,7 +63,7 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('spark_fast_lio')
-    default_config = os.path.join(pkg_share, 'config', 'unitree.yaml')
+    default_config = os.path.join(pkg_share, 'config', 'unitree_reloc.yaml')
     default_rviz = os.path.join(pkg_share, 'rviz', 'unitree_reloc.rviz')
 
     return LaunchDescription([

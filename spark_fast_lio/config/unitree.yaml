@@ -1,9 +1,9 @@
 /**:
   ros__parameters:
     common:
-      # Bare names: the node auto-prepends its namespace (e.g. -> unitree/os_lidar).
+      # Bare names: the node auto-prepends its namespace (e.g. -> husky/os_sensor).
       # Prefix with '/' to opt out (e.g. "/map" stays global, unnamespaced).
-      lidar_frame: "os_lidar"
+      lidar_frame: "os_sensor"
       imu_frame: "vectornav"
       map_frame: "odom"
       base_frame: "base_link"
@@ -19,11 +19,13 @@
       # as static TFs itself (instead of relying on URDF / ouster driver / external publishers).
       # When BOTH flags below are true, mapping.extrinsic_T/R (IMU->LiDAR) is auto-derived from
       # these matrices and the values in mapping.extrinsic_T/R are ignored.
+      # From bag /husky/tf_static: husky/base_link -> husky/os_sensor is identity
       publish_base_to_lidar_tf: true
-      base_T_lidar: [0.0, 0.0, 0.20]
-      base_R_lidar: [ 1.0, 0.0, 0.0,
-                      0.0, 1.0, 0.0,
-                      0.0, 0.0, 1.0]
+      base_T_lidar: [0.0, 0.0, 0.2]
+      base_R_lidar: [1.0, 0.0, 0.0,
+                     0.0, 1.0, 0.0,
+                     0.0, 0.0, 1.0]
+      # From bag: husky/base_link -> husky/vectornav
       publish_base_to_imu_tf: true
       base_T_imu: [0.0, 0.0, 0.0]
       base_R_imu: [1.0, 0.0, 0.0,
@@ -64,11 +66,10 @@
       #  - [0.0, 0.0, 0.0, 1.0]
       # However, this matrix is tranformation of IMU w.r.t. LiDAR frame.
       # What we need is transformation LiDAR w.r.t. (or to) IMU frame; thus, the inverse matrix should be given
-      # Ignored while both publish_base_to_*_tf are true.
-      extrinsic_T: [0.0, 0.0, -0.2]
-      extrinsic_R: [ 1.0, 0.0, 0.0,
-                     0.0, 1.0, 0.0,
-                     0.0, 0.0, 1.0]
+      extrinsic_T: [0.0, 0.0,-0.2]
+      extrinsic_R: [1.0, 0.0, 0.0,
+                    0.0, 1.0, 0.0,
+                    0.0, 0.0, 1.0]
 
     filter_size_map: 0.25 #.5
 
@@ -89,7 +90,7 @@
     publish:
       path_en: true
       scan_publish_en: true        # false: close all the point cloud output
-      dense_publish_en: false       # false: low down the points number in a global-frame point clouds scan.
+      dense_publish_en: true       # false: low down the points number in a global-frame point clouds scan.
       scan_lidarframe_pub_en: true # true: output the point cloud scans in the LiDAR frame
       scan_bodyframe_pub_en: false  # true: output the point cloud scans in IMU-body frame
       scan_baseframe_pub_en: false  # true: output the point cloud scans in the base frame
@@ -97,20 +98,25 @@
 
     pcd_save:
       pcd_save_en: false
-      save_path: ""                # directory to save scans and poses (empty = <package>/PCD)
+      save_path: "/home/unitree/maps/saved_maps"           # directory to save scans and poses (empty = <package>/PCD)
+                                      # Needs the /home prefix to land on the ~/maps bind mount
+                                      # (docker-compose.yml). Without it this wrote to /unitree/maps
+                                      # in the container's ephemeral layer and was lost on recreate.
+                                      # husky.yaml:101 and husky_reloc.yaml:101 still carry the same
+                                      # missing prefix ("/husky/maps/saved_maps").
       full_map_voxel_size: 0.2        # voxel size for the full accumulated map written on shutdown
       save_individual_scans: false    # if true: save per-interval scan pcds + poses_odom.txt (+ poses_map.txt when relocalized)
       interval: 1                     # how many LiDAR frames merged into each individual scan pcd
 
     relocalization:
-      # Robot-local delivery path, parallel to husky.yaml's. The prior map does NOT have
-      # to come from this robot -- the unitree relocalizes into a husky-built map, which
-      # is the whole point of §9. Whatever puts a map here just has to overwrite this
-      # file; the node reads it once at startup.
-      # NOTE husky.yaml spells its directory "recevied_maps". That typo is load-bearing
-      # on the husky: nothing in this repo writes that path, so it is the robot's own
-      # map-delivery mechanism that does. Do not "correct" it without checking that.
       map_file: "/home/unitree/maps/received_maps/received_latest_map.pcd"  # absolute path to prior map .pcd
+                                                # "received_maps", correctly spelled: this is where
+                                                # mesh_network delivers (config.env RECV_DIR=
+                                                # $HOME/maps/received_maps) and what unitree_reloc.yaml
+                                                # uses. husky.yaml keeps its "recevied_maps" spelling --
+                                                # that one is load-bearing on the husky, see the note in
+                                                # unitree_reloc.yaml. /home/unitree/maps is the host
+                                                # ~/maps bind mount (docker-compose.yml).
       map_frame: "map"                          # global map frame (matches campus_ouster.rviz Fixed Frame)
       odom_frame: "odom"                        # must match common.map_frame
       base_frame: "base_link"                   # must match common.base_frame
@@ -120,78 +126,91 @@
       prior_map_topic: "fast_lio/prior_map"
       localized_odom_topic: "fast_lio/relocalized_odometry"
       status_topic: ""  # empty = standalone mapping (non-empty makes mapper wait for a relocalization node; blocks stats + pcd save)
+      diagnostic_topic: "fast_lio/relocalization_diagnostic"  # std_msgs/String, one line per attempt
       publish_localized_odom: true
       correction_rate_hz: 0.5
-      tf_publish_rate_hz: 20.0
-      # Coverage gate: keep running past the edge of the prior map. When the robot
-      # is farther than coverage_radius from the nearest prior-map trajectory point,
-      # scan-to-map registration pauses (map<-odom frozen, odom dead-reckons) and
-      # resumes on re-entry. Trajectory auto-found next to the map (.pcd folder).
-      coverage_gate_enabled: true
-      coverage_radius: 5.0              # [m] distance from mapped trajectory before pausing
-      trajectory_file: ""               # empty = auto-detect (poses_tum.txt / poses_map.txt / poses_kitti.txt)
-      trajectory_format: "auto"         # auto | tum | kitti
+      tf_publish_rate_hz: 20.0  # declared but unused: TF now follows the odometry stamps
       gicp:
-        # 3.0 confirmed: 5/8/12 do not widen the convergence basin and they raise the
-        # wrong-pose inlier ratio 0.592 -> 0.701, which shrinks the separation margin.
-        # The failure mode is rotational, not range-limited. §3.2.
         max_correspondence_distance_init: 3.0
         max_correspondence_distance_track: 1.0
         max_iterations: 50
         transformation_epsilon: 1.0e-4
-        fitness_threshold: 1.0  # accepted if lower than this value
+        # fitness_threshold removed: pcl getFitnessScore() is an unbounded
+        # squared-distance average, so its value moves with how much of the
+        # scan falls outside the map. Replaced by correction.min_inlier_ratio.
 
-      # --- Global relocalization (no operator initial pose) ---------------------
-      # This whole block was absent, so every value below fell back to a node default.
-      # That mattered: the default global.voxel_size is 0.5, which §7.3 measured as the
-      # point where KISS-Matcher correspondences collapse. Verified in use -- the unitree
-      # relocalizes into the husky's map with these values (§9.4).
+      # --- Global relocalization (no operator initial pose) ------------------
+      # Runs KISS-Matcher against the prior map until a pose is confirmed, then
+      # hands over to tracking. /initialpose still works and bypasses the search.
       global:
         enabled: true
-        attempt_period: 3.0
-        # 0.0 = attempt as soon as odometry exists. A separate gate already delays the
-        # first attempt on this platform: enable_gravity_alignment publishes no odometry
-        # until the robot moves, which took 19 s of bag time. Raise this only if the
-        # first attempts are wasted on a degenerate window.
-        min_span: 0.0
-        map_voxel_size: 0.2        # NOT 0.5 -- see §7.3
-        voxel_size: 0.2
-        use_quatro: true           # yaw-dominant motion
+        attempt_period: 3.0        # s between global attempts while unlocalized
+        min_span: 0.0              # m of travel required before the first attempt;
+                                   # raise to ~5 if the sensor FOV is narrow
+        # 0.2, NOT 0.5. Measured on three sites: the KISS-Matcher correspondence count
+        # collapses as this grows. On the aug08 map: 268 initial pairs at 0.2 against 12
+        # at 0.5, and 0.5 produced zero usable registrations anywhere. Do not raise it,
+        # and do not use extract_prior_map.py's diag/60 suggestion -- on a map whose
+        # bounding box is inflated by sparse long-range returns that reads 5.9.
+        # RELOC_TEST_PLAN.md §7.3.
+        map_voxel_size: 0.2        # prior-map leaf fed to KISS-Matcher
+        voxel_size: 0.2            # KISS-Matcher voxel; drives normal/FPFH radii
+        use_quatro: true           # yaw-dominant motion (ground robot)
         use_ratio_test: true
-        # 20 is met in practice: the confirming attempt scored 29-44 across four runs
-        # against the husky map. The first few attempts score 2-19 and are correctly
-        # rejected -- the fix for those is more travel, not a lower value here.
-        min_final_inliers: 20
-        min_source_points: 2000
-        min_verify_inlier_ratio: 0.85   # live runs score 0.99 when correct. §3.1
-        required_confirmations: 2       # load-bearing: see min_inlier_ratio below
-        max_confirm_disagreement: 1.0
+        min_final_inliers: 20      # GNC translation inliers required
+        min_source_points: 2000    # accumulated window must be this dense
+        # 0.85, not 0.5: at 0.5 a measured 10.45 m mis-registration scored 0.515 and
+        # would have been accepted. Live runs score 0.99 when correct, so 0.85 has a
+        # wide margin. §3.1.
+        min_verify_inlier_ratio: 0.85  # GICP refinement must corroborate
+        required_confirmations: 2  # independent agreeing proposals before latching
+        max_confirm_disagreement: 1.0      # m
         max_confirm_disagreement_deg: 6.0
 
+      # --- Sliding-window scan accumulation ----------------------------------
+      # A single sweep under-constrains z/roll/pitch and gives FPFH too little
+      # structure; odom is locally accurate so stacking a few scans is cheap.
       accumulator:
         max_scans: 10
-        max_span: 20.0
-        # 0.5 confirmed. Ten *consecutive* scans span only 0.43 m and add nothing; with
-        # this gate ten keyframes span 5 m and add real viewpoints. Viewpoint spread,
-        # not point count, is what drives the inlier count. §3.4.
-        min_keyframe_move: 0.5
+        max_span: 20.0             # m of path retained
+        min_keyframe_move: 0.5     # m; stops a stationary robot filling the window
 
+      # --- Prior-map submap cropping -----------------------------------------
+      # Bounds the GICP target so covariances are not recomputed over the whole
+      # map every cycle. Re-crops only after the robot moves refresh_move.
       submap:
-        # SITE-DEPENDENT. Roughly the diagonal of the *core* of the prior map, not of its
-        # raw bounding box. 40 suits the jul22 lab (core 31 x 12 m). §9.5.
-        radius: 40.0
+        # SITE-DEPENDENT. Set it to roughly the diagonal of the *core* of the prior map,
+        # not of its raw bounding box -- 97% of a map may sit in 31 x 12 m while the
+        # bounding box reads 272 x 226 m. Used so far: 40 (jul22 lab), 80 (aug08),
+        # 150 (aug11 site). §9.5.
+        radius: 60.0
         refresh_move: 10.0
 
+      # --- Correction gating --------------------------------------------------
       correction:
-        alpha: 0.3
-        max_translation_step: 0.25      # §3.5
+        alpha: 0.3                 # fraction of the way to the new estimate; 1.0 = old hard overwrite
+        # 0.25, not 0.5: the recorded odom_corrected shows legitimate motion topping out
+        # at 0.099 m per message, and two real discontinuities of 1.07 m and 0.31 m.
+        # 0.5 catches the first and passes the second. §3.5.
+        max_translation_step: 0.25 # m; larger corrections are treated as mis-registrations
         max_rotation_step_deg: 5.0
-        # 0.70 is a true-positive floor, not a safety limit -- 0.85 rejects correct
-        # poses and drops the lock. It cannot stop a wrong latch either; the geometric
-        # guards do that. §8.5, §8.6.
-        min_inlier_ratio: 0.70
-        inlier_dist: 0.3                # §3.3
-        max_eval_samples: 5000
+        # 0.70. This is a TRUE-POSITIVE floor, not a safety limit. Correct poses score
+        # 0.783-0.834 while tracking, and 0.85 rejected them: the node hit 15 consecutive
+        # rejections at displacements of 0.001-0.016 m, declared the lock lost, and fell
+        # back to a global search it did not need. At 0.70: zero rejections over a run.
+        # It CANNOT stop a wrong latch. On 2 of 3 measured query windows a pose 5.08 m
+        # from truth scored 0.893, above what the correct pose scored (0.861), so no
+        # value here separates right from wrong. The guards that do are geometric:
+        # max_translation_step, required_confirmations, max_confirm_disagreement.
+        # §8.5, §8.6.
+        min_inlier_ratio: 0.75     # replaces gicp.fitness_threshold
+        inlier_dist: 0.3           # m; saturates above 0.3 and stops discriminating. §3.3
+        max_eval_samples: 5000     # 0 = score every point
+
+      # --- Loss detection -----------------------------------------------------
+      lost_recovery:
+        enabled: true
+        max_consecutive_failures: 15   # then drop back to global search
 
     verbose: true
     pcl_verbose: false
